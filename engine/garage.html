@@ -1,0 +1,341 @@
+<title>Coachwork Garage Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300..700&family=Jost:wght@300;400;500&family=Cormorant+Garamond:ital,wght@1,500&display=swap">
+<style>
+/* Layout: a night garage as a tool. The car stands on a polished floor in front of its own name in neon on the wall;
+   the left rail picks the car (each loads only when chosen), the bottom rail is the rim library, the right rail the views,
+   and the ignition (start button in a rev counter, lights and sound beside it) sits centre stage under the car. */
+:root {
+  --bg: #0b0b0d;
+  --panel: rgba(16,16,19,.72);
+  --fg: #eeebf0;
+  --dim: #9a96a1;
+  --line: rgba(238,235,240,.14);
+  --accent: #c0485a;
+  --head: "Oswald", "Arial Narrow", Impact, sans-serif;
+  --thin: "Jost", "Futura", sans-serif;
+  --serif: "Cormorant Garamond", Georgia, serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box }
+html, body { height: 100%; background: var(--bg) }
+body { margin: 0; color: var(--fg); font-family: var(--thin); -webkit-font-smoothing: antialiased; overflow: hidden }
+button { font: inherit; color: inherit }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none }
+.lab { font-size: 10.5px; font-weight: 500; letter-spacing: .26em; text-transform: uppercase; color: var(--dim) }
+.ui { position: fixed; z-index: 2; pointer-events: none; inset: 0; padding: max(18px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) max(18px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); display: grid; grid-template-columns: 250px 1fr 170px; grid-template-rows: auto 1fr auto; gap: 14px }
+.ui > * { pointer-events: auto }
+.mast { grid-column: 1 / 4; display: flex; align-items: baseline; gap: 14px }
+.mast b { font-family: var(--head); font-weight: 600; font-size: 22px; letter-spacing: .06em }
+.mast span { font-family: var(--serif); font-style: italic; font-size: 19px; color: var(--dim) }
+#ign { grid-column: 2; grid-row: 2; align-self: end; justify-self: center; margin-bottom: 4px; --d: 128px; --side: 46px; gap: 14px }
+.rims .spec { min-height: 4.1em }
+.panel { background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0 }
+.cars { grid-column: 1; grid-row: 2; align-self: start }
+.car { all: unset; cursor: pointer; display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: baseline; padding: 9px 8px; border-left: 2px solid transparent; transition: background-color .2s, border-color .2s }
+.car .no { font-family: var(--head); font-weight: 300; font-size: 18px; color: var(--c) }
+.car b { display: block; font-family: var(--head); font-weight: 500; font-size: 17px; letter-spacing: .01em; text-transform: uppercase; line-height: 1.05 }
+.car i { display: block; font-style: normal; font-size: 11.5px; color: var(--dim); margin-top: 2px }
+.car:hover { background: rgba(255,255,255,.04) }
+.car[aria-pressed="true"] { border-left-color: var(--c); background: rgba(255,255,255,.06) }
+.views { grid-column: 3; grid-row: 2; align-self: start }
+.btn { all: unset; cursor: pointer; padding: 8px 11px; border: 1px solid var(--line); font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; text-align: center; transition: background-color .2s, border-color .2s, color .2s; user-select: none; -webkit-user-select: none; touch-action: none }
+.btn:hover { border-color: rgba(238,235,240,.4) }
+.btn[aria-pressed="true"], .btn.held { background: var(--fg); color: var(--bg); border-color: var(--fg) }
+.rims { grid-column: 1 / 4; grid-row: 3; display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center }
+.rimlist { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px }
+.rim { all: unset; cursor: pointer; flex: 0 0 auto; display: grid; justify-items: center; gap: 6px; width: 98px; padding: 10px 6px 8px; border: 1px solid var(--line); transition: border-color .2s, background-color .2s }
+.rim svg { width: 54px; height: 54px; color: var(--fg) }
+.rim span { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; line-height: 1.25 }
+.rim[aria-pressed="true"] { border-color: var(--accent); background: rgba(255,255,255,.06) }
+.fin { display: flex; flex-wrap: wrap; gap: 6px; max-width: 360px }
+.chip { all: unset; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px 6px 7px; border: 1px solid var(--line); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase }
+.chip i { width: 16px; height: 16px; border-radius: 50%; background: var(--sw); box-shadow: inset 0 -3px 5px rgba(0,0,0,.35), inset 0 2px 4px rgba(255,255,255,.3) }
+.chip[aria-pressed="true"] { border-color: var(--accent) }
+.chip:disabled { opacity: .35; cursor: default }
+.spec { font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--dim); max-width: 26ch }
+.loader { position: fixed; z-index: 3; left: 50%; top: 46%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 10px; transition: opacity .5s; pointer-events: none }
+.loader i { display: block; width: 180px; height: 1px; background: var(--line); position: relative; overflow: hidden }
+.loader i::after { content: ""; position: absolute; inset: 0; background: var(--fg); transform-origin: left; transform: scaleX(var(--p, 0)); transition: transform .25s }
+.loader.off { opacity: 0 }
+@media (max-width: 900px) {
+  .ui { grid-template-columns: 1fr auto; grid-template-rows: auto auto 1fr auto auto; gap: 8px }
+  .mast { grid-column: 1 / 3 } #ign { grid-column: 1 / 3; grid-row: 3; --d: 96px; --side: 40px; gap: 12px; margin-bottom: 0 }
+  .mast b { font-size: 18px }
+  .cars { grid-column: 1 / 3; grid-row: 2; display: flex; overflow-x: auto; padding: 8px; gap: 4px } .cars .lab { display: none }
+  .car { flex: 0 0 auto; grid-template-columns: auto auto; padding: 6px 10px 6px 8px } .car i { display: none } .car b { font-size: 14px }
+  .views { grid-column: 1 / 3; grid-row: 4; display: flex; overflow-x: auto; padding: 6px; gap: 6px } .views .lab { display: none } .views .btn { padding: 7px 10px; white-space: nowrap }
+  .rims { grid-column: 1 / 3; grid-row: 5; grid-template-columns: 1fr; gap: 8px; padding: 8px } .rims .spec, .rims .lab { display: none }
+  .rim { width: 74px; padding: 7px 4px 6px; gap: 4px } .rim svg { width: 36px; height: 36px } .rim span { font-size: 9.5px }
+  .fin { flex-wrap: nowrap; overflow-x: auto; max-width: none; margin-top: 0 !important } .chip { flex: 0 0 auto; white-space: nowrap }
+  .mast span { display: none }
+}
+</style>
+
+<canvas id="c" role="img" aria-label="A car on a garage floor; choose a car, a rim and a view"></canvas>
+<div class="loader lab" id="loader"><span id="loadTxt">Opening the garage</span><i></i></div>
+
+<div class="ui">
+  <header class="mast"><b>COACHWORK</b><span>Garage library · a supplement to issues 01–05</span></header>
+  <nav class="panel cars" id="cars" aria-label="Cars"><span class="lab">The cars</span></nav>
+  <div class="panel views" id="views" aria-label="Views"><span class="lab">Views</span></div>
+  <div class="ignbox" id="ign" role="group" aria-label="Engine, lights and sound"></div>
+  <section class="panel rims" aria-label="Rim library">
+    <div><span class="lab">Rim library</span><p class="spec" id="rimSpec">Forged monoblock, 20 inch, mounted on the car's own tyres.</p></div>
+    <div style="display:grid;gap:10px;min-width:0"><div class="rimlist" id="rimlist"></div></div>
+    <div><span class="lab">Finish</span><div class="fin" id="fin" style="margin-top:8px"></div></div>
+  </section>
+</div>
+
+%%IMPORTMAP%%
+<script type="module">
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+%%STAGE%%
+%%CARKIT%%
+
+const CARS = %%CARS%%;
+const RIMS = [
+  { id: 'factory', name: 'Factory', spec: 'The wheels the car was built with.' },
+  { id: 'y5', name: 'Y-spoke', spec: 'Five split Y-spokes, forged from one billet, 20 inch, centre-lock look.' },
+  { id: 's10', name: 'Ten-spoke', spec: 'Ten straight spokes and a deep machined lip, 20 inch.' },
+  { id: 'aero', name: 'Aero turbine', spec: 'A closed turbine face that pulls air out of the arch, 20 inch.' },
+  { id: 'mesh', name: 'Mesh', spec: 'A cross-laced mesh in the 1990s motorsport tradition, 20 inch.' },
+];
+const FINISHES = [
+  { name: 'Gloss black', color: '#0a0a0c', metal: 0.25, rough: 0.12, coat: 1 },
+  { name: 'Satin gold', color: '#b58f3e', metal: 1, rough: 0.3, coat: 0.4 },
+  { name: 'Bronze', color: '#5b3d22', metal: 1, rough: 0.34, coat: 0.3 },
+  { name: 'Copper', color: '#a8582f', metal: 1, rough: 0.2, coat: 0.5 },
+  { name: 'Mirror chrome', color: '#e6e6ea', metal: 1, rough: 0.04, coat: 0 },
+  { name: 'Candy', color: 'paint', metal: 0.7, rough: 0.18, coat: 1 },
+];
+const ICONS = {
+  factory: '<circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" stroke-width="2"/><text x="32" y="37" text-anchor="middle" font-size="13" fill="currentColor" font-family="Oswald">OEM</text>',
+  y5: [...Array(5)].map((_, i) => { const a = i * 72; return `<g transform="rotate(${a} 32 32)"><path d="M32 26 L32 14 M32 14 L27 6 M32 14 L37 6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/></g>`; }).join('') + '<circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="32" cy="32" r="6" fill="currentColor"/>',
+  s10: [...Array(10)].map((_, i) => `<line x1="32" y1="32" x2="32" y2="7" transform="rotate(${i * 36} 32 32)" stroke="currentColor" stroke-width="2.4"/>`).join('') + '<circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="32" cy="32" r="7" fill="currentColor"/>',
+  aero: [...Array(12)].map((_, i) => `<path d="M32 32 C 38 26, 40 16, 34 6" transform="rotate(${i * 30} 32 32)" stroke="currentColor" stroke-width="2" fill="none"/>`).join('') + '<circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="32" cy="32" r="7" fill="currentColor"/>',
+  mesh: [...Array(14)].map((_, i) => `<path d="M32 32 Q 44 18 32 5" transform="rotate(${i * 25.7} 32 32)" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M32 32 Q 20 18 32 5" transform="rotate(${i * 25.7} 32 32)" stroke="currentColor" stroke-width="1.4" fill="none"/>`).join('') + '<circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="32" cy="32" r="6" fill="currentColor"/>',
+};
+
+/* ---------- renderer and the garage ---------- */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0b0d); scene.fog = new THREE.Fog(0x0b0b0d, 3.5, 8.5);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(studioRoom({ walls: 0.12, floor: 0.2 }), 0.02).texture;
+const camera = new THREE.PerspectiveCamera(32, 1, 0.01, 50);
+const key = new THREE.DirectionalLight(0xffffff, 1.3); key.position.set(-3, 6, -2); scene.add(key);
+const rimL = new THREE.DirectionalLight(0xffe4c8, 0.7); rimL.position.set(4, 2.5, 4); scene.add(rimL);
+const fx = makeBloom(renderer, scene, camera, { strength: 0.5, radius: 0.55, threshold: 1.0 });
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.07; controls.minDistance = 0.3; controls.maxDistance = 3.6;
+controls.maxPolarAngle = Math.PI * 0.495; controls.enablePan = false; controls.autoRotateSpeed = 0.6;
+
+// a photo studio cyclorama: a curved wall that runs into the floor with no edge, a soft pool of light under the car,
+// and the car's name in the paint of the far wall (seen from the front only)
+const grad = (stops, w, h, radial) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+  const gr = radial ? g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2) : g.createLinearGradient(0, h, 0, 0);
+  stops.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+const cyc = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 3.4, 128, 1, true),
+  new THREE.MeshBasicMaterial({ map: grad([[0, '#2a2a30'], [0.18, '#18181c'], [0.6, '#0c0c0e'], [1, '#070708']], 8, 256), side: THREE.BackSide, fog: false }));
+cyc.position.y = 1.7; scene.add(cyc);
+// the floor is polished: it lets a little of what is mirrored under it show through (the neon's reflection)
+const floor = new THREE.Mesh(new THREE.CircleGeometry(4.2, 128), new THREE.MeshStandardMaterial({
+  map: grad([[0, '#64646c'], [0.22, '#424249'], [0.62, '#29292f'], [1, '#2e2e34']], 512, 512, true), roughness: 0.32, metalness: 0.05, transparent: true, opacity: 0.86 }));
+floor.rotation.x = -Math.PI / 2; floor.renderOrder = -1; scene.add(floor);
+scene.background = new THREE.Color(0x070708); scene.fog = null;
+
+// The car's name in neon on the far wall: glass tubes bent round the letters, a white-hot core in a coloured tube with
+// its halo, bright past 1.0 so the bloom takes it. It lights the floor and the back of the car in its colour (a soft
+// area light, kept low so the paint still reads true) and shows in the floor. It strikes with a flicker for each car.
+RectAreaLightUniformsLib.init();
+// it stands where the opening view looks past the car, facing it, so the name reads behind the car
+const NEON = { w: 3.3, h: 0.825, y: 0.345, at: new THREE.Vector3(-0.95, 0, 1.2).normalize().multiplyScalar(3.6) };
+const neonYaw = Math.atan2(-NEON.at.x, -NEON.at.z);
+const neonC = document.createElement('canvas'); neonC.width = 2048; neonC.height = 512;
+const neonR = document.createElement('canvas'); neonR.width = 1024; neonR.height = 256;
+const neonTex = new THREE.CanvasTexture(neonC), neonRTex = new THREE.CanvasTexture(neonR);
+for (const tx of [neonTex, neonRTex]) { tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; }
+const neonMat = new THREE.MeshBasicMaterial({ map: neonTex, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, color: 0x000000 });
+const neon = new THREE.Mesh(new THREE.PlaneGeometry(NEON.w, NEON.h), neonMat);
+neon.position.set(NEON.at.x, NEON.y, NEON.at.z); neon.rotation.y = neonYaw; scene.add(neon);
+const neonReflMat = new THREE.MeshBasicMaterial({ map: neonRTex, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, color: 0x000000, side: THREE.DoubleSide });
+const neonRefl = new THREE.Mesh(new THREE.PlaneGeometry(NEON.w, NEON.h), neonReflMat);
+neonRefl.position.set(NEON.at.x, -NEON.y, NEON.at.z); neonRefl.rotation.y = neonYaw; neonRefl.scale.y = -1; neonRefl.renderOrder = -2; scene.add(neonRefl);
+const neonLight = new THREE.RectAreaLight(0xffffff, 0, NEON.w * 0.7, NEON.h * 0.45);
+neonLight.position.set(NEON.at.x * 0.98, NEON.y, NEON.at.z * 0.98); neonLight.lookAt(0, 0.2, 0); scene.add(neonLight);
+let neonT = 9, neonCol = new THREE.Color();
+// blurred strokes drawn through a shadow (canvas filters are missing on some browsers)
+function glowText(g, txt, color, width, blur, alpha) {
+  g.save(); g.globalAlpha = alpha; g.lineWidth = width; g.strokeStyle = color; g.shadowColor = color; g.shadowBlur = blur;
+  g.shadowOffsetX = 10000; g.translate(-10000, 0); g.strokeText(txt, 0, 0); g.restore();
+}
+function drawNeon(g, W, H, txt, color, sc) {
+  g.clearRect(0, 0, W, H); g.save();
+  g.font = '600 380px Oswald, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineCap = 'round';
+  const k = Math.min(1, 1860 / g.measureText(txt).width) * sc; g.translate(W / 2, H * 0.53); g.scale(k, k);
+  const core = '#' + new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.72).getHexString();
+  glowText(g, txt, color, 22, 60, 0.75); glowText(g, txt, color, 12, 16, 0.9);
+  if (sc === 1) { g.lineWidth = 9; g.strokeStyle = color; g.strokeText(txt, 0, 0); g.lineWidth = 3; g.strokeStyle = core; g.strokeText(txt, 0, 0); }
+  else glowText(g, txt, core, 14, 10, 0.8);
+  g.restore();
+}
+function neonOn(name, color) {
+  const txt = name.toUpperCase();
+  drawNeon(neonC.getContext('2d'), 2048, 512, txt, color, 1); neonTex.needsUpdate = true;
+  drawNeon(neonR.getContext('2d'), 1024, 256, txt, color, 0.5); neonRTex.needsUpdate = true;
+  neonCol.set(color); neonLight.color.copy(neonCol); neonT = window.__stageSnap ? 9 : 0;
+}
+// the strike: a stutter, then the tubes fill
+const neonLevel = (t) => t < 0.25 ? 0 : t < 0.32 ? 0.8 : t < 0.42 ? 0.05 : t < 0.47 ? 1 : t < 0.6 ? 0.25 : Math.min(1, 0.55 + (t - 0.6) * 1.6);
+
+/* ---------- loading a car (one at a time; the last one is freed) ---------- */
+const draco = new DRACOLoader().setDecoderPath('draco/');
+const gl = new GLTFLoader().setDRACOLoader(draco);
+const loader = document.getElementById('loader'), loadTxt = document.getElementById('loadTxt');
+let current = null, kit = null, carCtx = null, rimTpl = {}, choice = { rim: 'y5', fin: 0 };
+const MODEL_EXT = 'txt';   // 'glb' in the repository copies
+function b64(url, onP) { url = url.replace(/\.txt$/, '.' + MODEL_EXT); if (MODEL_EXT === 'glb') return new Promise((res, rej) => new THREE.FileLoader().setResponseType('arraybuffer').load(url, res, (e) => e.total && onP?.(e.loaded / e.total), rej)); return new Promise((res, rej) => new THREE.FileLoader().setResponseType('text').load(url, (t) => { const bin = atob(t.trim()); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); res(u.buffer); }, (e) => e.total && onP?.(e.loaded / e.total), rej)); }
+const parse = (buf) => new Promise((res, rej) => gl.parse(buf, '', res, rej));
+function free(obj) { obj.traverse((o) => { o.geometry?.dispose(); const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach((m) => { if (!m) return; for (const k in m) if (m[k]?.isTexture) m[k].dispose(); m.dispose(); }); }); }
+
+async function loadCar(c) {
+  const token = (loadCar.t = (loadCar.t || 0) + 1);
+  loader.classList.remove('off'); loader.style.setProperty('--p', 0); loadTxt.textContent = `${c.make} ${c.name}`;
+  const buf = await b64(`model-${c.key}.txt`, (p) => { loader.style.setProperty('--p', p); loadTxt.textContent = `${c.make} ${c.name} · ${Math.round(p * 100)}%`; });
+  const g = await parse(buf);
+  if (token !== loadCar.t) return;                      // another car was picked meanwhile
+  if (current) { scene.remove(current); free(current); kit?.stop(); }
+  const holder = new THREE.Group(); scene.add(holder); current = holder; holder.userData.key = c.key;
+  const model = g.scene; model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model, true), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+  const L = Math.max(size.x, size.y, size.z), s = 1 / L;
+  const wrap = new THREE.Group(); model.position.set(-ctr.x, -box.min.y, -ctr.z); wrap.add(model); wrap.scale.setScalar(s); holder.add(wrap); wrap.updateMatrixWorld(true);
+  carCtx = { THREE, holder, wrap, model, renderer, scale: s, size: size.clone().multiplyScalar(s), anchors: { center: new THREE.Vector3(0, size.y * s / 2, 0) }, opt: { front: -1 } };
+  kit = carKit(carCtx, c.cfg);
+  kit.setPaint(c.cfg.paints[0]);
+  shadowFor(carCtx);
+  neonOn(c.name, c.accent);
+  document.documentElement.style.setProperty('--accent', c.accent);
+  loader.classList.add('off');
+  applyRims(true);
+  setView(view, true);
+}
+
+function shadowFor(ctx) {
+  const { x: w, z: l } = ctx.size;
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 512; const g = cv.getContext('2d');
+  // soft shapes drawn through a shadow (canvas filters are missing on some browsers)
+  const soft = (blur, draw) => { g.save(); g.shadowColor = 'rgba(0,0,0,.65)'; g.shadowBlur = blur; g.shadowOffsetX = 10000; g.translate(-10000, 0); g.fillStyle = '#000'; g.beginPath(); draw(); g.fill(); g.restore(); };
+  soft(26, () => g.roundRect(56, 52, 144, 408, 70));
+  for (const a of ctx.wheels || []) { const u = 128 + a.x / w * 175, v = 256 + a.z / l * 440; soft(12, () => g.ellipse(u, v, 20, 46, 0, 0, Math.PI * 2)); }
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.45, l * 1.14), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, toneMapped: false }));
+  p.rotation.x = -Math.PI / 2; p.position.y = 0.002; ctx.holder.add(p); ctx.shadow = p;
+}
+
+/* ---------- rims (the car kit mounts them; templates are shared between cars) ---------- */
+async function rimTemplate(id) {
+  if (!rimTpl[id]) rimTpl[id] = b64(`rim-${id}.txt`).then(parse).then((g) => carKit.prepRim(THREE, g.scene));
+  return rimTpl[id];
+}
+// a change of rims is a show: the portal opens, the car rises, the rims change, it drops and settles (carKit.swapRims)
+async function applyRims(instant) {
+  if (!kit) return;
+  document.getElementById('fin').querySelectorAll('.chip').forEach((b) => b.disabled = choice.rim === 'factory');
+  const k = kit, id = choice.rim;
+  await k.swapRims(() => id === 'factory' ? null : rimTemplate(id), { instant });
+  if (k !== kit || id !== choice.rim) return;
+  k.setRim(id === 'factory' ? { factory: true } : FINISHES[choice.fin]);
+}
+function setFinish(f) { if (kit?.forged) kit.setRim(f); }
+
+/* ---------- views ---------- */
+const VIEWS = {
+  'Three-quarter': (c) => ({ pos: [0.95, 0.3, -1.2], tgt: [0, 0.1, 0] }),
+  'Side': (c) => ({ pos: [-1.75, 0.16, 0], tgt: [0, 0.1, 0] }),
+  'Wheel': (c) => { const w = (c.wheels || []).find((w) => w.z < 0 && w.x < 0) || { x: -0.2, y: 0.07, z: -0.3, r: 0.07 }; return { pos: [w.x - 0.42, w.y + 0.04, w.z - 0.16], tgt: [w.x, w.y, w.z] }; },
+  'Rear': (c) => ({ pos: [-0.75, 0.3, 1.25], tgt: [0, 0.1, 0] }),
+  'Top': (c) => ({ pos: [0, 2.0, -0.02], tgt: [0, 0, 0] }),
+};
+let view = 'Three-quarter', fly = null;
+// a narrow screen gets a wider lens and a camera further back, so the whole car stays in frame
+const fitK = () => Math.max(1, 0.44 / (Math.tan(camera.fov * Math.PI / 360) * camera.aspect) / 1.3);
+function setView(v, now) {
+  view = v; if (!carCtx) return;
+  const d = VIEWS[v](carCtx), k = fitK(), tg = new THREE.Vector3(...d.tgt);
+  const to = new THREE.Vector3(...d.pos).sub(tg).multiplyScalar(k).add(tg);
+  controls.maxDistance = 3.6 * k;
+  fly = { from: camera.position.clone(), fromT: controls.target.clone(), to, toT: tg, t: now ? 1 : 0 };
+  document.querySelectorAll('#views .btn[data-v]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === v));
+}
+
+/* ---------- the rails ---------- */
+const carsEl = document.getElementById('cars');
+CARS.forEach((c, i) => {
+  const b = document.createElement('button'); b.className = 'car'; b.style.setProperty('--c', c.accent);
+  b.innerHTML = `<span class="no">${c.no}</span><span><b>${c.make} ${c.name}</b><i>${c.paint}</i></span>`;
+  b.addEventListener('click', () => { carsEl.querySelectorAll('.car').forEach((x) => x.setAttribute('aria-pressed', x === b)); loadCar(c).catch((e) => { console.error(e); loadTxt.textContent = 'This car could not be loaded. Pick another.'; }); });
+  carsEl.appendChild(b);
+});
+const viewsEl = document.getElementById('views');
+Object.keys(VIEWS).forEach((v) => { const b = document.createElement('button'); b.className = 'btn'; b.dataset.v = v; b.textContent = v; b.addEventListener('click', () => setView(v)); viewsEl.appendChild(b); });
+const spin = document.createElement('button'); spin.className = 'btn'; spin.textContent = 'Turntable'; spin.setAttribute('aria-pressed', 'true');
+spin.addEventListener('click', () => { controls.autoRotate = !controls.autoRotate; spin.setAttribute('aria-pressed', controls.autoRotate); }); viewsEl.appendChild(spin);
+controls.autoRotate = true;
+const rimEl = document.getElementById('rimlist');
+RIMS.forEach((r) => {
+  const b = document.createElement('button'); b.className = 'rim'; b.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true">${ICONS[r.id]}</svg><span>${r.name}</span>`;
+  b.setAttribute('aria-pressed', r.id === choice.rim); if (r.id === choice.rim) document.getElementById('rimSpec').textContent = r.spec;
+  b.addEventListener('click', () => { choice.rim = r.id; rimEl.querySelectorAll('.rim').forEach((x) => x.setAttribute('aria-pressed', x === b)); document.getElementById('rimSpec').textContent = r.spec; applyRims(); });
+  rimEl.appendChild(b);
+});
+const finEl = document.getElementById('fin');
+FINISHES.forEach((f, i) => {
+  const b = document.createElement('button'); b.className = 'chip'; b.innerHTML = `<i style="--sw:${f.color === 'paint' ? 'var(--accent)' : f.color}"></i>${f.name}`;
+  b.setAttribute('aria-pressed', i === choice.fin);
+  b.addEventListener('click', () => { choice.fin = i; finEl.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', x === b)); setFinish(f); });
+  finEl.appendChild(b);
+});
+
+/* ---------- the ignition: built once, it drives whichever car is on the floor ---------- */
+carKit.ignition(document.getElementById('ign'), () => kit);
+
+/* ---------- loop ---------- */
+function resize() {
+  renderer.setSize(innerWidth, innerHeight, false); fx.composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight;
+  camera.fov = camera.aspect < 0.8 ? 46 : camera.aspect < 1.2 ? 38 : 32;
+  // the car sits above the middle of the screen, clear of the ignition and the panels under it
+  const dy = innerHeight * (innerWidth > 900 ? 0.1 : 0.045);
+  camera.setViewOffset(innerWidth, innerHeight, 0, dy, innerWidth, innerHeight); camera.updateProjectionMatrix();
+  if (carCtx && !fly) setView(view, true);
+}
+addEventListener('resize', resize); resize();
+camera.position.set(0.95, 0.3, -1.2); controls.target.set(0, 0.1, 0);
+const clock = new THREE.Clock();
+controls.addEventListener('start', () => { fly = null; });
+(function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (fly) {
+    fly.t = Math.min(1, fly.t + dt / 1.1); const e = 1 - Math.pow(1 - fly.t, 3);
+    camera.position.lerpVectors(fly.from, fly.to, e); controls.target.lerpVectors(fly.fromT, fly.toT, e);
+    if (fly.t >= 1) fly = null;
+  }
+  controls.update();
+  kit?.frame({ lights: 0, env: 1, spin: 0 }, dt);
+  neonT += dt; const nl = neonLevel(neonT);
+  neonMat.color.copy(neonCol).lerp(new THREE.Color(1, 1, 1), 0.55).multiplyScalar(2.3 * nl);
+  neonReflMat.color.setScalar(0.9 * nl); neonLight.intensity = 2.2 * nl;
+  fx.composer.render(dt);
+})();
+
+window.__garage = { kit: () => kit, ctx: () => carCtx, wheels: () => carCtx?.wheels, cam: (p, t) => { fly = null; controls.autoRotate = false; camera.position.set(...p); controls.target.set(...t); controls.update(); } };
+document.fonts?.load('600 100px Oswald').then(() => { const c = CARS.find((x) => x.key === current?.userData.key) || CARS.find((x) => x.key === 'agera'); const t0 = neonT; neonOn(c.name, c.accent); neonT = t0; });
+carsEl.querySelectorAll('.car')[CARS.findIndex((c) => c.key === 'agera')].click();
+</script>

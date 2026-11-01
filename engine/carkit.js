@@ -1,0 +1,726 @@
+// Car kit: what every issue does to its car once loaded. Material roles by name (the car-mansion export's names),
+// a flake paint with optional livery layers, anchors for the camera (wheels, lamps, tail, exhaust), turning wheels, a body
+// on springs, the rim change (a portal on the floor), the engine (start, idle, rev, overrun) and the ignition control.
+
+function carKit(ctx, cfg) {
+  const { THREE } = ctx;
+  const front = ctx.opt.front;
+  const world = (o) => new THREE.Box3().setFromObject(o);
+  const meshes = []; ctx.model.traverse((m) => { if (m.isMesh) meshes.push(m); });
+  // remember each mesh's original material name: roles and anchors are found by it, before any override
+  for (const m of meshes) m.userData.mat0 = (Array.isArray(m.material) ? m.material[0] : m.material)?.name || '';
+  const matName = (m) => m.userData.mat0;
+  const has = (re) => meshes.filter((m) => re.test(matName(m)));
+
+  /* ---------- wheel arches: whatever wraps round a tyre and faces it is a liner, matte black ---------- */
+  // (a gloss part there mirrors the studio as a grey ring round the tyre). Filled once the wheels are measured.
+  const AU = { uArch: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) }, uArchAx: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) }, uArchN: { value: 0 } };
+  const archPatch = (s, declared) => {
+    Object.assign(s.uniforms, AU);
+    if (!declared) {
+      s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCarP; varying vec3 vCarN;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCarP = (modelMatrix * vec4(transformed, 1.0)).xyz; vCarN = normalize(mat3(modelMatrix) * objectNormal);');
+      s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vCarP; varying vec3 vCarN;');
+    }
+    s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>
+uniform vec4 uArch[4]; uniform vec4 uArchAx[4]; uniform int uArchN;
+float archK = 0.0;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  for (int i = 0; i < 4; i++) {
+    if (i >= uArchN) break;
+    vec3 d = vCarP - uArch[i].xyz, ax = uArchAx[i].xyz; float t = dot(d, ax); vec3 rv = d - ax * t; float rr = length(rv);
+    float zone = step(abs(t), uArchAx[i].w) * step(uArch[i].w * 0.97, rr) * step(rr, uArch[i].w * 1.45);
+    archK = max(archK, zone * smoothstep(0.1, 0.45, dot(normalize(vCarN), -rv / max(rr, 1e-5))));
+  }
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.006), archK);`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(roughnessFactor, 0.9, archK);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n  metalnessFactor = mix(metalnessFactor, 0.0, archK);')
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n  material.clearcoat *= 1.0 - archK;');
+  };
+
+  /* ---------- paint with flake and livery layers ---------- */
+  const U = {
+    uFlake: { value: 1 }, uFlakeCol: { value: new THREE.Color(cfg.flakeColor || '#ffffff') },
+    uSweep: { value: 0 }, uSweepCol: { value: new THREE.Color('#f0c419') }, uSweepA: { value: new THREE.Vector4() }, uSweepW: { value: 0 },
+    uPin: { value: 0 }, uPinY: { value: 0 }, uPinW: { value: 0 }, uCarbonBelow: { value: -1 },
+    uDecal: { value: null }, uDecalOn: { value: 0 }, uDecalBox: { value: new THREE.Vector4() }, uDecalCol: { value: new THREE.Color('#0d0d0e') },
+  };
+  const paint = new THREE.MeshPhysicalMaterial({ color: cfg.paints?.[0]?.color || '#300', metalness: cfg.matte ? 0.25 : 0.5,
+    roughness: cfg.matte ? 0.5 : 0.34, clearcoat: cfg.matte ? 0.25 : 1, clearcoatRoughness: cfg.matte ? 0.35 : 0.02, envMapIntensity: 0.9 });
+  paint.onBeforeCompile = (s) => {
+    Object.assign(s.uniforms, U);
+    s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCarP; varying vec3 vCarN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCarP = (modelMatrix * vec4(transformed, 1.0)).xyz; vCarN = normalize(mat3(modelMatrix) * objectNormal);');
+    s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vCarP; varying vec3 vCarN;
+uniform float uFlake; uniform vec3 uFlakeCol;
+uniform float uSweep; uniform vec3 uSweepCol; uniform vec4 uSweepA; uniform float uSweepW;
+uniform float uPin; uniform float uPinY; uniform float uPinW; uniform float uCarbonBelow;
+uniform sampler2D uDecal; uniform float uDecalOn; uniform vec4 uDecalBox; uniform vec3 uDecalCol;
+float carbonMask = 0.0;
+vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  vec3 nC = normalize(vCarN);
+  float side = smoothstep(0.45, 0.6, abs(nC.x));
+  // a side line rising toward the tail: uSweepA = (z at its front, z at its rear, y at front, y at rear)
+  if (uSweep > 0.5) {
+    float t = (vCarP.z - uSweepA.x) / (uSweepA.y - uSweepA.x);
+    float yc = mix(uSweepA.z, uSweepA.w, clamp(t, 0.0, 1.0));
+    float band = 1.0 - smoothstep(uSweepW * 0.5, uSweepW * 0.5 + 0.0015, abs(vCarP.y - yc));
+    float inside = step(0.0, t) * step(t, 1.0) * smoothstep(0.0, 0.08, t);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uSweepCol, band * inside * side);
+  }
+  if (uPin > 0.5) {
+    float pin = 1.0 - smoothstep(uPinW * 0.5, uPinW * 0.5 + 0.001, abs(vCarP.y - uPinY));
+    diffuseColor.rgb = mix(diffuseColor.rgb, uSweepCol, pin * side);
+  }
+  carbonMask = step(vCarP.y, uCarbonBelow);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.012), carbonMask);
+  if (uDecalOn > 0.5) {
+    vec2 uv = vec2((vCarP.z - uDecalBox.x) * sign(vCarP.x) * -1.0 / uDecalBox.z + 0.5, (vCarP.y - uDecalBox.y) / uDecalBox.w + 0.5);
+    if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) { float a = texture2D(uDecal, uv).a; diffuseColor.rgb = mix(diffuseColor.rgb, uDecalCol, a * side); }
+  }`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(roughnessFactor, 0.22, carbonMask);')
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  vec3 fp = vCarP * 1500.0;
+  float pxw = length(fwidth(fp));
+  float nearF = 1.0 - smoothstep(0.35, 1.2, pxw);
+  vec3 fl = hash33(floor(fp)) - 0.5;
+  normal = normalize(normal + fl * 0.09 * uFlake * nearF * (1.0 - carbonMask));`);
+    archPatch(s, true);
+  };
+
+  /* ---------- material roles ---------- */
+  const M = {
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x07070a, metalness: 0.1, roughness: 0.02, transparent: true, opacity: 0.5, envMapIntensity: 1.5 }),
+    lens: new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0, roughness: 0.02, transparent: true, opacity: 0.1, envMapIntensity: 1.5, depthWrite: false }),
+    // both faces: some tyres are modelled open at the sidewall (so the brakes show), and the floor would show through
+    tyre: new THREE.MeshStandardMaterial({ color: 0x0f0f10, roughness: 0.78, metalness: 0, side: THREE.DoubleSide }),
+    mesh: new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.62, metalness: 0.25, side: THREE.DoubleSide }),
+    carbon: new THREE.MeshPhysicalMaterial({ color: 0x0d0d0f, roughness: 0.38, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.04 }),
+  };
+  M.carbon.onBeforeCompile = (s) => archPatch(s, false);
+  const rims = [], bolts = [], calipers = [], lampsF = [], lampsT = [];
+  for (const m of meshes) {
+    const n = matName(m);
+    if (/(_Paint|_green_hell|_Body)$/.test(n)) m.material = paint;
+    else if (/(_Glass|GlassTint)$/.test(n)) m.material = M.glass;
+    else if (/LensClear$/.test(n)) m.material = M.lens;
+    else if (/_Wheel(Black)?$/.test(n)) rims.push(m);
+    else if (/GoldBolts$/.test(n)) bolts.push(m);
+    else if (/_Caliper$/.test(n)) calipers.push(m);
+    else if (/Tyre/.test(n)) m.material = M.tyre;
+    else if (/GrilleMesh/.test(n)) m.material = M.mesh;
+    else if (/Carbon/.test(n)) m.material = M.carbon;
+    const mat = m.material;
+    if (mat && mat.emissive && mat.emissiveIntensity > 0 && (mat.emissive.r + mat.emissive.g + mat.emissive.b) > 0) {
+      if (/Tail/.test(n)) {
+        if (!mat.userData.lamp) {
+          mat.color.setRGB(0.18, 0.004, 0.003); mat.roughness = 0.06; mat.metalness = 0;
+          mat.emissive.setRGB(1.0, 0.035, 0.02); mat.userData.lamp = /LED/.test(n) ? 'tailLED' : 'tail';
+        }
+        lampsT.push(m);
+      } else {
+        if (!mat.userData.lamp) { const e = mat.emissive; const k = Math.max(e.r, e.g, e.b) || 1; e.multiplyScalar(1 / k); mat.userData.lamp = 'front'; }
+        lampsF.push(m);
+      }
+    }
+  }
+  const rimMat = rims[0]?.material?.clone(); if (rimMat) { rimMat.userData.base = { color: rimMat.color.clone(), metal: rimMat.metalness, rough: rimMat.roughness, coat: rimMat.clearcoat || 0 }; rims.forEach((m) => m.material = rimMat); }
+  const boltMat = bolts[0]?.material; const calMat = calipers[0]?.material?.clone(); if (calMat) calipers.forEach((m) => m.material = calMat);
+
+  /* ---------- anchors ---------- */
+  const A = ctx.anchors, sz = ctx.size;
+  A.front = new THREE.Vector3(0, sz.y * 0.4, front * sz.z * 0.5);
+  A.rear = new THREE.Vector3(0, sz.y * 0.4, -front * sz.z * 0.5);
+  A.cabin = new THREE.Vector3(0, sz.y * 0.8, 0);
+  // wheels from the tyres; a tyre mesh may hold two (an axle) or four
+  const wheels = [];
+  // Wheels from the tyres. One wheel can be several tyre parts (the 812 has its sidewall lettering as a ring of its
+  // own) and one part can hold two or four tyres (an axle). So the tyre points are pooled, split into one group per
+  // wheel, and each group is measured: its axle (the direction its points spread least: steered or cambered wheels are
+  // not square to the car), its centre, its outer radius, its inner radius (where a rim seats) and its width.
+  const groups = [], v = new THREE.Vector3();
+  for (const m of has(/Tyre/)) {
+    const pos = m.geometry.attributes.position, n = pos.count, step = Math.max(1, Math.floor(n / 8000));
+    const b = world(m), s = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3());
+    const splitX = s.x > sz.x * 0.5, splitZ = s.z > sz.z * 0.45, parts = new Map();
+    for (let i = 0; i < n; i += step) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+      const key = (splitX ? (v.x > c.x ? 'R' : 'L') : '-') + (splitZ ? (v.z > c.z ? 'B' : 'F') : '-');
+      if (!parts.has(key)) parts.set(key, []);
+      parts.get(key).push(v.clone());
+    }
+    for (const pts of parts.values()) {
+      const cc = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(pts.length);
+      let g = groups.find((g) => Math.hypot(g.c.y - cc.y, g.c.z - cc.z) < 0.08 * sz.z && Math.sign(g.c.x) === Math.sign(cc.x));
+      if (!g) { g = { pts: [], meshes: new Set(), c: cc, shared: false }; groups.push(g); }
+      for (const p of pts) g.pts.push(p);
+      g.meshes.add(m); if (parts.size > 1) g.shared = true;
+    }
+  }
+  for (const g of groups) {
+    const P = g.pts, n = P.length;
+    const c = P.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(n);
+    let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+    for (const p of P) { const dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z; xx += dx * dx; xy += dx * dy; xz += dx * dz; yy += dy * dy; yz += dy * dz; zz += dz * dz; }
+    const e = (xx + yy + zz) * 1e-6;
+    const inv = new THREE.Matrix3().set(xx + e, xy, xz, xy, yy + e, yz, xz, yz, zz + e).invert();
+    const a = new THREE.Vector3(1, 0, 0);
+    for (let k = 0; k < 24; k++) a.applyMatrix3(inv).normalize();
+    if (Math.abs(a.x) < 0.8) a.set(1, 0, 0);      // a tyre's axle always runs across the car
+    if (a.x < 0) a.negate();
+    let tmin = 1e9, tmax = -1e9; const rho = new Float32Array(n), d = new THREE.Vector3();
+    P.forEach((p, k) => { d.copy(p).sub(c); const t = d.dot(a); tmin = Math.min(tmin, t); tmax = Math.max(tmax, t); rho[k] = d.addScaledVector(a, -t).length(); });
+    const sorted = Array.from(rho).sort((x, y) => x - y);
+    c.addScaledVector(a, (tmin + tmax) / 2);
+    const single = !g.shared && [...g.meshes].every((m) => groups.filter((h) => h.meshes.has(m)).length === 1);
+    wheels.push({ x: c.x, y: c.y, z: c.z, r: sorted[Math.floor(n * 0.995)], ri: sorted[Math.floor(n * 0.005)], width: tmax - tmin,
+                  axis: a, mesh: single ? [...g.meshes][0] : null });
+  }
+  ctx.wheels = wheels;
+  wheels.slice(0, 4).forEach((w, i) => { AU.uArch.value[i].set(w.x, w.y, w.z, w.r); const a = w.axis || new THREE.Vector3(1, 0, 0); AU.uArchAx.value[i].set(a.x, a.y, a.z, (w.width || w.r) * 0.8); });
+  AU.uArchN.value = Math.min(4, wheels.length);
+  for (const w of wheels) {
+    const name = 'wheel' + (w.z * front > 0 ? 'F' : 'R') + (w.x > 0 ? 'p' : 'm');
+    A[name] = new THREE.Vector3(w.x, w.y, w.z);
+  }
+  const cluster = (list, nm) => {
+    if (!list.length) return;
+    const b = new THREE.Box3(); list.forEach((m) => b.union(world(m)));
+    const c = b.getCenter(new THREE.Vector3());
+    A[nm + 'p'] = new THREE.Vector3(b.max.x * 0.72, c.y, c.z); A[nm + 'm'] = new THREE.Vector3(b.min.x * 0.72, c.y, c.z);
+    A[nm] = c;
+  };
+  cluster(lampsT, 'tail'); cluster(lampsF.filter((m) => world(m).getCenter(new THREE.Vector3()).z * front > 0), 'lamp');
+  cluster(has(/Exhaust/), 'exhaust');
+  if (!A.exhaust) A.exhaust = A.rear.clone().setY(sz.y * 0.2);
+
+  /* ---------- wheels and body: the unsprung parts on their own nodes, the body on springs above them ---------- */
+  // A tyre that holds one wheel gets a pivot it turns on, with its rim and disc. A tyre shared across an axle can't turn
+  // alone, so it goes on a fixed hub with the parts round it; calipers go on the hub too (they don't turn). The rest of
+  // the car is the body, which moves on its springs over the wheels.
+  const hub = new THREE.Group(); ctx.wrap.add(hub);
+  const pivots = [];
+  for (const w of wheels) {
+    if (!w.mesh) continue;
+    const pivot = new THREE.Group(); ctx.wrap.add(pivot); ctx.wrap.updateMatrixWorld(true);
+    pivot.position.copy(ctx.wrap.worldToLocal(new THREE.Vector3(w.x, w.y, w.z)));
+    if (w.axis && Math.abs(w.axis.x) > 0.9) pivot.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), w.axis);
+    pivot.updateMatrixWorld(true);
+    pivots.push({ pivot, w, at: new THREE.Vector3(w.x, w.y, w.z) });
+  }
+  const nodeOf = (w) => pivots.find((p) => p.w === w)?.pivot || hub;
+  for (const m of meshes) {
+    const n = matName(m);
+    if (/_Paint$|_Body$|_green_hell$/.test(n)) continue;
+    const b = world(m), s = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3());
+    let best = null, bd = 1e9;
+    for (const w of wheels) { const d = c.distanceTo(new THREE.Vector3(w.x, w.y, w.z)); if (d < bd) { bd = d; best = w; } }
+    const near = best && bd < best.r * 0.6 && Math.max(s.y, s.z) < best.r * 2.3 && s.x < best.r * 1.6;
+    if (near) (/_Caliper$/.test(n) ? hub : nodeOf(best)).attach(m);
+    else if (/Tyre/.test(n)) hub.attach(m);          // a tyre shared by an axle
+  }
+  ctx.pivots = pivots;
+  const body = new THREE.Group(); ctx.wrap.add(body);
+  body.position.set(0, (sz.y * 0.4) / ctx.scale, 0); body.updateMatrixWorld(true); body.attach(ctx.model);
+  const body0 = body.position.clone();
+  ctx.body = body; ctx.hub = hub;
+  // springs: heave (car units), pitch and roll (radians), each with its own target
+  const S = { y: 0, vy: 0, p: 0, vp: 0, r: 0, vr: 0, ty: 0, tp: 0, tr: 0 };
+  function springs(dt, shake) {
+    const n = Math.max(1, Math.ceil(dt / 0.006)), h = dt / n;
+    for (let i = 0; i < n; i++) {
+      S.vy += (-110 * (S.y - S.ty) - 7 * S.vy) * h; S.y += S.vy * h;
+      S.vp += (-150 * (S.p - S.tp) - 8 * S.vp) * h; S.p += S.vp * h;
+      S.vr += (-150 * (S.r - S.tr) - 7 * S.vr) * h; S.r += S.vr * h;
+    }
+    body.position.y = body0.y + S.y / ctx.scale;
+    body.rotation.set(S.p, 0, S.r + shake);
+  }
+
+  /* ---------- the headlamps' light pool ---------- */
+  const pc = document.createElement('canvas'); pc.width = 256; pc.height = 512; const pg = pc.getContext('2d');
+  pg.globalCompositeOperation = 'lighter';
+  for (const u of [78, 178]) { pg.save(); pg.translate(u, 140); pg.scale(1, 2.8); const gr = pg.createRadialGradient(0, 0, 0, 0, 0, 62); gr.addColorStop(0, 'rgba(210,220,255,.5)'); gr.addColorStop(.5, 'rgba(190,200,255,.16)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); pg.fillStyle = gr; pg.beginPath(); pg.arc(0, 0, 62, 0, Math.PI * 2); pg.fill(); pg.restore(); }
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(sz.x * 1.6, sz.z * 1.3), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(pc), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  pool.rotation.x = -Math.PI / 2; if (front < 0) pool.rotation.z = Math.PI; pool.position.set(0, 0.002, front * (sz.z * 0.5 + sz.z * 0.62)); ctx.holder.add(pool);
+
+  /* ---------- controls: paint, rims, bolts ---------- */
+  const api = {
+    paint, rimMat, boltMat, calMat, U,
+    setPaint(p) {
+      paint.color.set(p.color); U.uFlake.value = p.flake ?? 1; if (p.flakeColor) U.uFlakeCol.value.set(p.flakeColor);
+      if (calMat && p.caliper) calMat.color.set(p.caliper);
+    },
+    setRim(r) {
+      if (!rimMat) return;
+      if (r.factory) { const b = rimMat.userData.base; rimMat.color.copy(b.color); rimMat.metalness = b.metal; rimMat.roughness = b.rough; rimMat.clearcoat = b.coat; return; }
+      rimMat.color.set(r.color === 'paint' ? paint.color.getStyle() : r.color); rimMat.metalness = r.metal; rimMat.roughness = r.rough; rimMat.clearcoat = r.coat ?? 0;
+    },
+    setBolt(b) { if (boltMat) { boltMat.color.set(b.color); boltMat.metalness = b.metal; boltMat.roughness = b.rough; } },
+  };
+
+  // additive glow that keeps a transparent canvas transparent: colour adds, alpha follows the brightness
+  const glowMat = (frag, uniforms, extra = {}) => new THREE.ShaderMaterial({ uniforms, transparent: true, depthWrite: false, toneMapped: false,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+    vertexShader: extra.vertex || 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: frag, side: extra.side ?? THREE.FrontSide });
+  const glowCol = (() => { const c = new THREE.Color(cfg.accent || '#7fa8ff'), h = {}; c.getHSL(h); return c.setHSL(h.h, Math.min(1, h.s * 1.1 + 0.12), 0.6); })();
+
+  /* ---------- forged rims from the library: mounted on the car's own tyres, turning with its wheels ---------- */
+  const FACTORY_RE = /(_Wheel|WheelBlack|WheelLip|WheelBarrel|GoldBolts|GoldAnodised)$/;
+  let mounted = [], hidden = [], forgedMat = null, lastFinish = null;
+  const leaving = [];
+  api.forged = false;
+  api.mountedRims = () => mounted;
+  api.factoryRims = () => {
+    for (const m of mounted) { if (window.__stageSnap) m.parent?.remove(m); else { m.userData.leave = 0; leaving.push(m); } }
+    mounted = [];
+    for (const m of hidden) m.visible = true; hidden = []; api.forged = false;
+    if (lastFinish) api.setRim(lastFinish);
+  };
+  api.mountRims = (tpl) => {
+    api.factoryRims();
+    // the whole car, pivots and hub included
+    ctx.wrap.traverse((m) => {
+      if (!m.isMesh || m.userData.forged) return;
+      const n = m.userData.mat0 || '';
+      if (/Tyre|_Paint$|_Body$|_green_hell$/.test(n)) return;
+      if (/Brake|Disc|Caliper/.test(n)) {
+        // a real brake sits inboard of the hub face; one modelled out past it would show through any rim
+        const b = new THREE.Box3().setFromObject(m);
+        const out = wheels.some((w) => Math.abs((b.min.z + b.max.z) / 2 - w.z) < w.r && Math.abs((b.min.y + b.max.y) / 2 - w.y) < w.r &&
+          (w.x > 0 ? b.max.x > w.x + w.width * 0.15 : b.min.x < w.x - w.width * 0.15));
+        if (out) { m.visible = false; hidden.push(m); }
+        return;
+      }
+      let near = false;
+      if (!FACTORY_RE.test(n)) {
+        const b = new THREE.Box3().setFromObject(m), c = b.getCenter(new THREE.Vector3()), s2 = b.getSize(new THREE.Vector3());
+        near = wheels.some((w) => c.distanceTo(new THREE.Vector3(w.x, w.y, w.z)) < w.r * 0.55 && Math.max(s2.y, s2.z) < w.r * 2.2);
+      }
+      if (FACTORY_RE.test(n) || near) { m.visible = false; hidden.push(m); }
+    });
+    if (!forgedMat) forgedMat = new THREE.MeshPhysicalMaterial({ color: 0x0a0a0c, metalness: 0.25, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 });
+    const up = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) }[tpl.axis].clone().multiplyScalar(tpl.faceSign);
+    // the wheels were measured with the car at rest: mount with any lift taken out
+    const ly = ctx.wrap.position.y; ctx.wrap.position.y = 0; ctx.wrap.updateMatrixWorld(true);
+    for (const w of wheels) {
+      const rim = tpl.t.clone(true);
+      rim.traverse((m) => { if (m.isMesh) { m.userData.forged = true; if (m.userData.face) m.material = forgedMat; } });
+      const out = (w.axis ? w.axis.clone() : new THREE.Vector3(1, 0, 0)).multiplyScalar(Math.sign(w.x) || 1);
+      // the rim's bead seat meets the tyre's inner edge; its depth fills the tyre's width
+      const k = (w.ri || w.r * 0.74) / tpl.bead;
+      const kv = new THREE.Vector3(k, k, k); kv[tpl.axis] = ((w.width || w.r * 0.85) * 0.94) / tpl.depth;
+      const parent = nodeOf(w); parent.updateMatrixWorld(true);
+      const wm = new THREE.Matrix4().compose(new THREE.Vector3(w.x, w.y, w.z), new THREE.Quaternion().setFromUnitVectors(up, out), kv);
+      rim.applyMatrix4(new THREE.Matrix4().copy(parent.matrixWorld).invert().multiply(wm));
+      rim.userData.s0 = rim.scale.clone(); rim.userData.grow = 0; rim.scale.copy(rim.userData.s0).multiplyScalar(0.001);
+      parent.add(rim); mounted.push(rim);
+    }
+    ctx.wrap.position.y = ly; ctx.wrap.updateMatrixWorld(true);
+    api.forged = true;
+    if (lastFinish) api.setRim(lastFinish);
+  };
+  const baseSetRim = api.setRim;
+  api.setRim = (r) => {
+    lastFinish = r;
+    if (api.forged && forgedMat) {
+      const f = r.factory ? { color: '#0a0a0c', metal: 0.25, rough: 0.12, coat: 1 } : r;
+      forgedMat.color.set(f.color === 'paint' ? paint.color.getStyle() : f.color); forgedMat.metalness = f.metal; forgedMat.roughness = f.rough; forgedMat.clearcoat = f.coat ?? 0;
+    } else baseSetRim(r);
+  };
+  function animateRims(dt) {
+    for (const m of mounted) if (m.userData.grow < 1) { m.userData.grow = window.__stageSnap ? 1 : Math.min(1, m.userData.grow + dt * 2.4); const e = 1 - Math.pow(1 - m.userData.grow, 3); m.scale.copy(m.userData.s0).multiplyScalar(Math.max(0.001, e)); }
+    for (let i = leaving.length - 1; i >= 0; i--) {
+      const m = leaving[i]; m.userData.leave += dt * 4.5;
+      if (m.userData.leave >= 1) { m.parent?.remove(m); leaving.splice(i, 1); continue; }
+      const e = 1 - m.userData.leave; m.scale.copy(m.userData.s0).multiplyScalar(Math.max(0.001, e * e));
+    }
+  }
+
+  /* ---------- the rim change: a portal opens on the floor, the car rises on its jacks, the wheels hang, the rims
+     change in a flash, the car drops and the body settles on its springs ---------- */
+  let portal = null, swap = null, lift = 0;
+  const LIFT = sz.y * 0.13, DROOP = sz.y * 0.035;
+  function makePortal() {
+    const R = Math.hypot(sz.x, sz.z) * 0.56, H = sz.y * 0.95;
+    const uni = { uT: { value: 0 }, uA: { value: 0 }, uC: { value: glowCol }, uShock: { value: -1 } };
+    const g = new THREE.Group(); ctx.holder.add(g);
+    const disc = new THREE.Mesh(new THREE.PlaneGeometry(R * 2.5, R * 2.5), glowMat(`
+uniform float uT, uA, uShock; uniform vec3 uC; varying vec2 vUv;
+float ring(float r, float c, float w) { float d = (r - c) / w; return exp(-d * d); }
+void main() {
+  vec2 p = (vUv - 0.5) * 2.5; float r = length(p), a = atan(p.y, p.x) / 6.2831853 + 0.5;
+  float k = ring(r, 1.0, 0.011) * 2.4 + ring(r, 1.0, 0.08) * 0.35;                 // the ring and its halo
+  k += ring(r, 0.935, 0.005) * 1.2;                                                  // a thin ring inside it
+  k += step(0.8, fract(a * 96.0 + uT * 0.4)) * step(0.945, r) * step(r, 0.99) * 0.9;  // graduations, turning
+  k += step(0.55, fract(a * 18.0 - uT * 0.22)) * ring(r, 0.86, 0.007) * 1.1;         // dashes turning the other way
+  k += ring(r, 1.07, 0.008) * smoothstep(0.6, 1.0, fract(a - uT * 0.45)) * 1.8;     // a sweep chasing round outside
+  vec2 gq = abs(fract(p * 7.0) - 0.5);
+  k += (1.0 - smoothstep(0.0, 0.035, min(gq.x, gq.y))) * step(r, 0.92) * (1.0 - r) * 0.16; // a faint grid on the floor
+  k += exp(-r * r * 2.5) * 0.25;                                                     // light pooled under the car
+  if (uShock >= 0.0) k += ring(r, uShock * 1.15, 0.025 + uShock * 0.06) * (1.0 - uShock) * 2.2;
+  vec3 c = uC * k * uA * (1.0 - smoothstep(1.1, 1.24, r));
+  gl_FragColor = vec4(c, clamp(max(c.r, max(c.g, c.b)), 0.0, 1.0));
+}`, uni));
+    disc.rotation.x = -Math.PI / 2; disc.position.y = 0.0025; disc.renderOrder = 2; g.add(disc);
+    const curtain = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 160, 1, true), glowMat(`
+uniform float uT, uA; uniform vec3 uC; varying vec2 vUv;
+void main() {
+  float y = vUv.y, fade = pow(1.0 - y, 2.6);
+  float lines = 0.45 + 0.55 * smoothstep(0.7, 1.0, fract(y * 6.0 - uT * 0.8));
+  float streak = 0.7 + 0.3 * sin(vUv.x * 6.2831853 * 60.0 + uT * 1.5);
+  vec3 c = uC * fade * lines * streak * uA * 0.32;
+  gl_FragColor = vec4(c, clamp(max(c.r, max(c.g, c.b)), 0.0, 1.0));
+}`, uni, { side: THREE.DoubleSide }));
+    curtain.position.y = H / 2; curtain.renderOrder = 3; g.add(curtain);
+    // sparks rising off the ring
+    const N = 150, pos = new Float32Array(N * 3), life = new Float32Array(N), seed = [...Array(N)].map(() => [Math.random(), Math.random(), 0.25 + Math.random() * 0.5, 0.97 + Math.random() * 0.06]);
+    const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.BufferAttribute(pos, 3)); pg2.setAttribute('aLife', new THREE.BufferAttribute(life, 1));
+    const pu = { uA: uni.uA, uC: uni.uC, uSize: { value: 6 } };
+    const sparks = new THREE.Points(pg2, glowMat(`
+uniform float uA; uniform vec3 uC; varying float vL;
+void main() { float d = length(gl_PointCoord - 0.5); vec3 c = uC * smoothstep(0.5, 0.0, d) * (1.0 - vL) * uA * 2.5; gl_FragColor = vec4(c, clamp(max(c.r, max(c.g, c.b)), 0.0, 1.0)); }`, pu, {
+      vertex: 'attribute float aLife; uniform float uSize; varying float vL; void main() { vL = aLife; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = uSize * (1.0 - aLife * 0.7) / -mv.z; gl_Position = projectionMatrix * mv; }' }));
+    sparks.frustumCulled = false; sparks.renderOrder = 4; g.add(sparks);
+    // the ring lights the car's sides and wheels in its colour
+    const lights = [-1, 1].map((sx) => { const l = new THREE.PointLight(glowCol, 0, R * 2, 2); l.position.set(sx * R * 0.7, sz.y * 0.45, 0); g.add(l); return l; });
+    return { g, uni, sparks, pos, life, seed, N, R, H, lights, t: 0, a: 0 };
+  }
+  function runPortal(dt, target) {
+    if (!portal && target <= 0) return;
+    if (!portal) portal = makePortal();
+    const P = portal; P.t += dt; P.a += (target - P.a) * Math.min(1, dt * (target > P.a ? 5 : 2.2));
+    P.g.visible = P.a > 0.004;
+    P.uni.uT.value = P.t; P.uni.uA.value = P.a;
+    if (P.uni.uShock.value >= 0) { P.uni.uShock.value += dt * 1.4; if (P.uni.uShock.value > 1) P.uni.uShock.value = -1; }
+    P.sparks.material.uniforms.uSize.value = (ctx.renderer?.domElement.height || 900) * 0.012;
+    for (let i = 0; i < P.N; i++) {
+      const [s0, ang, sp, rr] = P.seed[i], l = (s0 + P.t * sp) % 1, a = ang * Math.PI * 2 + l * 0.6;
+      P.pos[i * 3] = Math.cos(a) * P.R * rr; P.pos[i * 3 + 1] = l * P.H * 0.9; P.pos[i * 3 + 2] = Math.sin(a) * P.R * rr; P.life[i] = l;
+    }
+    P.sparks.geometry.attributes.position.needsUpdate = true; P.sparks.geometry.attributes.aLife.needsUpdate = true;
+    for (const l of P.lights) l.intensity = P.a * 0.16;
+  }
+  // a flash round each wheel as its new rim appears
+  const flashes = [];
+  function flashWheels() {
+    const fm = () => glowMat(`uniform float uA; uniform vec3 uC; varying vec2 vUv;
+void main() { vec2 p = vUv - 0.5; float r = length(p) * 2.0; float k = exp(-pow((r - 0.86) / 0.06, 2.0)) * 2.5 + exp(-r * r * 3.0) * 0.6; vec3 c = uC * k * uA; gl_FragColor = vec4(c, clamp(max(c.r, max(c.g, c.b)), 0.0, 1.0)); }`,
+      { uA: { value: 1 }, uC: { value: glowCol } }, { side: THREE.DoubleSide });
+    for (const w of wheels) {
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(w.r * 2.6, w.r * 2.6), fm());
+      const out = (w.axis ? w.axis.clone() : new THREE.Vector3(1, 0, 0)).multiplyScalar(Math.sign(w.x) || 1);
+      f.position.set(w.x, w.y + lift, w.z).addScaledVector(out, (w.width || w.r) * 0.6);
+      f.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), out);
+      f.renderOrder = 5; ctx.holder.add(f); flashes.push({ f, t: 0 });
+    }
+  }
+  function runFlashes(dt) {
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      const F = flashes[i]; F.t += dt * 2.2;
+      if (F.t >= 1) { ctx.holder.remove(F.f); F.f.geometry.dispose(); F.f.material.dispose(); flashes.splice(i, 1); continue; }
+      F.f.material.uniforms.uA.value = (1 - F.t) * (1 - F.t); F.f.scale.setScalar(0.7 + F.t * 0.6);
+    }
+  }
+  // swapRims(get): get() returns a rim template (or a promise of one), or null for the factory wheels.
+  // The promise it returns settles once the new rims are on.
+  api.swapRims = (get, o = {}) => new Promise((resolve, reject) => {
+    const p = Promise.resolve().then(get);
+    if (o.instant || window.__stageSnap) {
+      p.then((t) => { t ? api.mountRims(t) : api.factoryRims(); resolve(t); }, reject); return;
+    }
+    if (swap && (swap.phase === 'rise' || swap.phase === 'swap')) { swap.p = p; swap.ready = false; swap.waiting.push(resolve); }
+    else swap = { phase: 'rise', t: lift / LIFT * 0.8, p, ready: false, tpl: null, waiting: [resolve] };
+    const s = swap;
+    p.then((t) => { if (s.p === p) { s.tpl = t; s.ready = true; } }, (e) => { if (s.p === p) { swap = null; lift = 0; S.ty = 0; } reject(e); });
+    if (portal) portal.uni.uShock.value = 0; else { runPortal(0, 1); portal.uni.uShock.value = 0; }
+  });
+  const ease = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  function runSwap(dt) {
+    if (!swap) { runPortal(dt, 0); return; }
+    const W = swap; W.t += dt;
+    if (W.phase === 'rise') {
+      const e = ease(Math.min(1, W.t / 0.8)); lift = LIFT * e; S.ty = DROOP * e;
+      if (W.t >= 0.8 && W.ready) {
+        W.tpl ? api.mountRims(W.tpl) : api.factoryRims();
+        flashWheels(); W.phase = 'swap'; W.t = 0;
+        const done = W.waiting.splice(0); queueMicrotask(() => done.forEach((r) => r(W.tpl)));
+      }
+    } else if (W.phase === 'swap') {
+      if (W.t >= 0.6) { W.phase = 'drop'; W.t = 0; }
+    } else if (W.phase === 'drop') {
+      const x = Math.min(1, W.t / 0.34); lift = LIFT * (1 - x * x);
+      if (x >= 1) { lift = 0; S.ty = 0; S.vy -= sz.y * 0.35; S.vp += 0.05 * front; W.phase = 'settle'; W.t = 0; }
+    } else if (W.t > 1.4) swap = null;
+    runPortal(dt, W.phase === 'settle' ? 0 : 1);
+  }
+
+  /* livery layers in car space (metres given by the config, scaled to the stage's units) */
+  if (cfg.livery) {
+    const s = ctx.scale, L = cfg.livery;
+    const mid = wheels.length ? wheels.reduce((a, w) => a + w.z, 0) / wheels.length : 0;
+    const zf = (m) => mid + front * m * s, yh = (m) => m * s;
+    if (L.sweep) { U.uSweep.value = 1; U.uSweepCol.value.set(L.color); U.uSweepA.value.set(zf(L.sweep[0]), zf(L.sweep[1]), yh(L.sweep[2]), yh(L.sweep[3])); U.uSweepW.value = yh(L.sweep[4]); }
+    if (L.pin) { U.uPin.value = 1; U.uPinY.value = yh(L.pin[0]); U.uPinW.value = yh(L.pin[1]); }
+    if (L.carbonBelow) U.uCarbonBelow.value = yh(L.carbonBelow);
+    if (L.decal) { new THREE.TextureLoader().load(L.decal.src, (t) => { U.uDecal.value = t; U.uDecalOn.value = 1; }); U.uDecalBox.value.set(zf(L.decal.at[0]), yh(L.decal.at[1]), L.decal.size[0] * s, L.decal.size[1] * s); U.uDecalCol.value.set(L.decal.color); }
+  }
+
+  /* ---------- the engine: start, idle, rev, overrun; lights; sound ---------- */
+  // engine: 0 off, 1 starting (gauge sweep, then the starter), 2 running. The tach reads in rpm for the dial.
+  let engine = 0, engT = 0, held = false, pressAt = 0, pressedRunning = false, peak = 0;
+  let rpm = 0, lastRpm = 0, tach = 0, manual = 0, lampLevel = 0, strike = 1, audio = null, soundOn = true;
+  const pops = [];
+  // exhaust flashes: a warm light at the tail and the tips themselves glowing for an instant
+  const exMats = has(/Exhaust/).filter((m) => m.material?.emissive).map((m) => { const c = m.material.clone(); c.emissive = new THREE.Color(1, 0.38, 0.08); c.emissiveIntensity = 0; m.material = c; return c; });
+  const exLight = new THREE.PointLight(0xff7a2c, 0, sz.z * 0.9, 2); exLight.position.copy(A.exhaust).add(new THREE.Vector3(0, 0, -front * sz.z * 0.04)); ctx.holder.add(exLight);
+  let exFlash = 0;
+  function startAudio() {
+    if (audio || !soundOn) return;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const ac = new AC(); const out = ac.createGain(); out.gain.value = 0; out.connect(ac.destination);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 5; lp.connect(out);
+    const sh = ac.createWaveShaper(); const cv = new Float32Array(1024); for (let i = 0; i < 1024; i++) cv[i] = Math.tanh((i / 512 - 1) * 3); sh.curve = cv; sh.connect(lp);
+    const oscs = (cfg.engine?.mix || [[1, 'sawtooth', .5], [1.5, 'sawtooth', .32], [.5, 'square', .3], [3, 'sawtooth', .1]]).map(([mul, type, vol]) => {
+      const os = ac.createOscillator(); os.type = type; const g = ac.createGain(); g.gain.value = vol; os.connect(g); g.connect(sh); os.start(); return { os, mul }; });
+    const noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const nd = noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    audio = { ac, out, lp, oscs, noise };
+  }
+  function sfxStarter() {
+    if (!audio) return; const { ac, noise } = audio, t = ac.currentTime + 0.45;
+    const src = ac.createBufferSource(); src.buffer = noise; src.loop = true;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 1.4;
+    const g = ac.createGain(); g.gain.value = 0;
+    const lfo = ac.createOscillator(); lfo.frequency.value = 11; const lg = ac.createGain(); lg.gain.value = 0.05; lfo.connect(lg); lg.connect(g.gain);
+    g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.07, t + 0.05); g.gain.setValueAtTime(0.07, t + 0.5); g.gain.linearRampToValueAtTime(0, t + 0.62);
+    src.connect(bp); bp.connect(g); g.connect(ac.destination); src.start(t); lfo.start(t); src.stop(t + 0.7); lfo.stop(t + 0.7);
+  }
+  function sfxPop(when) {
+    if (!audio) return; const { ac, noise } = audio, t = ac.currentTime + when;
+    const src = ac.createBufferSource(); src.buffer = noise; const off = Math.random() * 0.8;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 500 + Math.random() * 1100; bp.Q.value = 0.9;
+    const g = ac.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.35 + Math.random() * 0.3, t + 0.004); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05 + Math.random() * 0.06);
+    src.connect(bp); bp.connect(g); g.connect(ac.destination); src.start(t, off, 0.15);
+  }
+  api.start = () => {
+    if (engine) return; engine = 1; engT = 0;
+    startAudio(); audio?.ac.resume?.(); sfxStarter();
+  };
+  api.kill = () => {
+    if (!engine) return; engine = 0; held = false;
+    S.vr -= 0.06 * front; S.vy -= sz.y * 0.05;
+  };
+  api.press = () => {
+    pressAt = performance.now(); pressedRunning = engine === 2; peak = 0;
+    if (!engine) api.start(); else { startAudio(); audio?.ac.resume?.(); }
+    held = true;
+  };
+  api.release = () => {
+    if (!held) return; held = false;
+    const quick = performance.now() - pressAt < 260;
+    if (pressedRunning && quick && peak < 0.3) { api.kill(); return; }
+    if (engine === 2 && rpm > 0.45) {                   // lifting off from high revs: the exhaust crackles
+      const n = 3 + Math.floor(rpm * 5);
+      for (let i = 0; i < n; i++) { const d = 0.06 + Math.random() * 0.75; pops.push(performance.now() + d * 1000); sfxPop(d); }
+    }
+  };
+  api.hold = (v) => v ? api.press() : api.release();
+  api.running = () => engine === 2;
+  api.engineState = () => engine;
+  api.tach = () => tach;
+  api.setLamp = (v) => { const on = v ? 1 : 0; if (on && !manual) strike = 0; manual = on; };
+  api.setSound = (v) => { soundOn = v; if (!soundOn && audio) { audio.ac.close(); audio = null; } };
+  api.stop = () => { if (audio) { audio.ac.close(); audio = null; } engine = 0; };
+  api.swapping = () => !!swap;
+  api.frame = (pose, dt) => {
+    animateRims(dt); runSwap(dt); runFlashes(dt);
+    ctx.wrap.position.y = lift;
+    wheels.slice(0, 4).forEach((w, i) => { AU.uArch.value[i].y = w.y + lift; });
+    if (ctx.shadow) ctx.shadow.material.opacity = (pose.shadow ?? 1) * (1 - 0.5 * lift / LIFT);
+    // the engine
+    engT += dt;
+    if (engine === 1) {
+      if (engT < 0.45) tach = 9000 * Math.sin(Math.min(1, engT / 0.45) * Math.PI);        // the gauge sweeps first
+      else if (engT < 1.05) { tach = 260 + Math.sin(engT * 70) * 60; S.vr += Math.sin(engT * 70) * 0.004; }  // the starter turns it over
+      else { engine = 2; rpm = 0.36; S.vr += 0.12 * front; S.vy -= sz.y * 0.08; }         // it catches with a flare
+    }
+    const throttle = engine === 2 && held ? 1 : 0;
+    rpm += (throttle - rpm) * Math.min(1, dt * (throttle ? 2.1 : 1.3));
+    if (engine !== 2) rpm *= Math.max(0, 1 - dt * 3);
+    peak = Math.max(peak, rpm);
+    const drpm = (rpm - lastRpm) / Math.max(dt, 1e-3); lastRpm = rpm;
+    if (engine === 2) tach += ((900 + rpm * 7700 + Math.sin(engT * 31) * 18) - tach) * Math.min(1, dt * 12);
+    else if (engine === 0) tach += (0 - tach) * Math.min(1, dt * 3);
+    // the body: torque reaction rolls it as the revs climb, the idle hums through it
+    S.tr = engine === 2 ? THREE.MathUtils.clamp(drpm * 0.006, -0.012, 0.012) : 0;
+    const shake = engine === 2 ? Math.sin(engT * (60 + rpm * 160)) * (0.0005 + rpm * 0.0009) : 0;
+    springs(dt, shake);
+    // overrun pops: the exhaust flashes with each
+    const now = performance.now();
+    for (let i = pops.length - 1; i >= 0; i--) if (now >= pops[i]) { exFlash = 0.6 + Math.random() * 0.6; pops.splice(i, 1); }
+    exFlash *= Math.max(0, 1 - dt * 22);
+    exLight.intensity = exFlash * 0.6; for (const m of exMats) m.emissiveIntensity = exFlash * 6;
+    // the lamps: daytime lights with the engine, full with the switch; LEDs strike with a flicker
+    strike = Math.min(1, strike + dt * 4);
+    const flick = strike >= 1 ? 1 : (strike < 0.12 ? 1 : strike < 0.2 ? 0.15 : strike < 0.3 ? 1 : strike < 0.36 ? 0.4 : 1);
+    const target = Math.max(pose.lights, manual * flick, engine === 2 ? 0.28 : 0);
+    lampLevel += (target - lampLevel) * Math.min(1, dt * (manual && strike < 1 ? 30 : 5));
+    // tails are always softly lit (a parked car with its lights on), and burn when the lights come on;
+    // headlamps only wake with the lights. Values are HDR: the bloom picks up what passes 1.0
+    for (const m of lampsF) m.material.emissiveIntensity = 0.02 + lampLevel * 9;
+    for (const m of lampsT) m.material.emissiveIntensity = (m.material.userData.lamp === 'tailLED' ? 1.2 : 0.35) + lampLevel * 7;
+    pool.material.opacity = lampLevel * Math.max(0, 1 - pose.env) * 0.9;
+    const spin = pose.spin * dt;
+    if (spin) for (const p of pivots) p.pivot.rotateX(front * spin);
+    if (audio) {
+      const t = audio.ac.currentTime, f = (cfg.engine?.idle || 38) + rpm * (cfg.engine?.range || 150) + Math.sin(t * 40) * 1.5;
+      audio.oscs.forEach(({ os, mul }) => os.frequency.setTargetAtTime(f * mul, t, 0.03));
+      audio.lp.frequency.setTargetAtTime(500 + rpm * 2600, t, 0.05);
+      audio.out.gain.setTargetAtTime(engine === 2 ? 0.045 + rpm * 0.17 : 0, t, engine === 2 ? 0.06 : 0.25);
+    }
+  };
+  return api;
+}
+
+
+/* ---------- the ignition: a start button inside a tachometer, with the lights and sound switches beside it ---------- */
+// Press to start (the needle sweeps, the starter turns, it catches), hold to rev, tap again to stop. One per page; it
+// drives whichever car kit getKit() returns, so a page can swap cars under it.
+carKit.ignition = (host, getKit) => {
+  const shared = carKit.ignState || (carKit.ignState = { lamp: false, snd: true, all: [] });
+  if (!document.getElementById('ign-css')) {
+    const st = document.createElement('style'); st.id = 'ign-css'; st.textContent = `
+.ign { --d: 150px; --side: 50px; position: relative; display: flex; align-items: center; gap: 16px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none }
+.ign-dial { position: relative; flex: 0 0 auto; width: var(--d); height: var(--d); border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #202026, #0b0b0e 60%, #050506);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 0 0 6px rgba(14,14,17,.7), 0 0 0 7px rgba(255,255,255,.06), 0 18px 44px rgba(0,0,0,.5), inset 0 0 24px rgba(0,0,0,.85) }
+.ign-tach { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible }
+.ign-tach .tk { stroke: #4e4b54; transition: stroke .6s } .ign-tach text { fill: #5f5b66; font: 500 14px Oswald, "Arial Narrow", sans-serif; transition: fill .6s }
+.ign-tach .rl { stroke: #e3362b; opacity: .4; transition: opacity .6s }
+.ign.lit .ign-tach .tk { stroke: #ebe7f0 } .ign.lit .ign-tach text { fill: #ebe7f0 } .ign.lit .ign-tach .rl { opacity: 1 }
+.ign-tach .tk.rl, .ign.lit .ign-tach .tk.rl { stroke: #e3362b }
+.ign-needle { transform-origin: 100px 100px; filter: drop-shadow(0 0 3px rgba(255,90,50,.8)) }
+.ign-rpm { position: absolute; left: 0; right: 0; bottom: 9%; text-align: center; font: 500 9px/1 "Jost", sans-serif; letter-spacing: .16em; color: #77727e; font-variant-numeric: tabular-nums }
+.ign.lit .ign-rpm { color: #ebe7f0 } .ign.red .ign-rpm { color: var(--accent, #d33) }
+.ign-start { all: unset; cursor: pointer; position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; margin: -23% 0 0 -23%; border-radius: 50%; box-sizing: border-box;
+  display: grid; place-content: center; gap: 2px; text-align: center; color: #efebf3; font: 600 calc(var(--d) * .068)/1.05 Oswald, "Arial Narrow", sans-serif; letter-spacing: .12em; text-transform: uppercase;
+  background: radial-gradient(circle at 50% 28%, #45454c, #1a1a1f 64%, #111114);
+  box-shadow: 0 0 0 2px #2b2b31, 0 0 0 4px rgba(0,0,0,.7), 0 0 0 5.5px var(--ring, rgba(214,150,40,.55)), 0 0 14px var(--glow, rgba(214,150,40,.25)), 0 6px 14px rgba(0,0,0,.6), inset 0 2px 3px rgba(255,255,255,.16), inset 0 -4px 7px rgba(0,0,0,.55);
+  transition: transform .12s, box-shadow .4s; touch-action: none }
+.ign-start small { display: block; font: 500 calc(var(--d) * .043)/1.2 "Jost", sans-serif; letter-spacing: .2em; color: #a49fab }
+.ign-start.held { transform: scale(.94) }
+.ign-start:focus-visible { outline: 2px solid var(--accent, #fff); outline-offset: 6px }
+.ign.on .ign-start { --ring: var(--accent, #d33); --glow: color-mix(in srgb, var(--accent, #d33) 70%, transparent) }
+.ign:not(.used) .ign-start::after { content: ""; position: absolute; inset: -10px; border-radius: 50%; border: 1.5px solid var(--accent, #d33); animation: ign-pulse 2.2s ease-out infinite; pointer-events: none }
+@keyframes ign-pulse { 0% { transform: scale(.86); opacity: .95 } 100% { transform: scale(1.45); opacity: 0 } }
+.ign-sw { display: grid; justify-items: center; gap: 7px; font: 500 9.5px/1 "Jost", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--ign-label, #b3aeb9) }
+.ign-side { all: unset; cursor: pointer; width: var(--side); height: var(--side); border-radius: 50%; display: grid; place-items: center; color: #8e8995;
+  background: radial-gradient(circle at 50% 32%, #2c2c33, #0e0e11 70%); box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 0 0 4px rgba(14,14,17,.55), 0 10px 24px rgba(0,0,0,.45); transition: color .3s, box-shadow .3s }
+.ign-side svg { width: 46%; height: 46% }
+.ign-side:focus-visible { outline: 2px solid var(--accent, #fff); outline-offset: 4px }
+.ign-side[aria-pressed="true"] { color: #f2f7ff; box-shadow: 0 0 0 1px rgba(220,235,255,.5), 0 0 0 4px rgba(14,14,17,.55), 0 0 22px rgba(160,195,255,.6), 0 10px 24px rgba(0,0,0,.45) }
+.ign-snd[aria-pressed="true"] { color: #efebf3; box-shadow: 0 0 0 1px rgba(255,255,255,.3), 0 0 0 4px rgba(14,14,17,.55), 0 10px 24px rgba(0,0,0,.45) }
+.ign-hint { position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%); white-space: nowrap; padding: 7px 14px; border-radius: 99px; background: rgba(12,12,15,.78); color: #efebf3; font: 500 10px/1 "Jost", sans-serif; letter-spacing: .22em; text-transform: uppercase; box-shadow: 0 0 0 1px rgba(255,255,255,.1); transition: opacity .6s; pointer-events: none }
+.ign-hint.off { opacity: 0 }
+.ign-pwr { display: none; width: 56%; height: 56% }
+.ign.mini .ign-pwr { display: block }
+.ign.mini .ign-start { font-size: 0; gap: 0; box-shadow: 0 0 0 1px #2b2b31, 0 0 0 2.5px var(--ring, rgba(214,150,40,.6)), 0 0 8px var(--glow, rgba(214,150,40,.2)), inset 0 1px 2px rgba(255,255,255,.16) }
+.ign.mini .ign-start small, .ign.mini .ign-sw span, .ign.mini .ign-hint, .ign.mini .ign-rpm, .ign.mini .ign-tach text { display: none }
+.ign.mini .ign-dial, .ign.mini .ign-side { box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 3px 9px rgba(0,0,0,.35) }
+.ign.mini .ign-side[aria-pressed="true"].ign-lamp { box-shadow: 0 0 0 1px rgba(220,235,255,.5), 0 0 12px rgba(160,195,255,.65) }
+.ign.mini:not(.used) .ign-start::after { inset: -5px }
+.ign.mini .ign-tach .tk { stroke-width: 6 }
+.ign.mini .ign-needle path { stroke: #ff5a32; stroke-width: 5; stroke-linejoin: round }
+@media (prefers-reduced-motion: reduce) { .ign:not(.used) .ign-start::after { animation: none; opacity: .6 } }`;
+    document.head.appendChild(st);
+  }
+  const P = (v, R) => { const a = (-135 + v / 9 * 270) * Math.PI / 180; return [100 + R * Math.sin(a), 100 - R * Math.cos(a)]; };
+  let ticks = '';
+  for (let v = 0; v <= 9.001; v += 0.5) { const major = Math.abs(v - Math.round(v)) < 0.01, [x1, y1] = P(v, 90), [x2, y2] = P(v, major ? 77 : 84);
+    ticks += `<line class="${v >= 7.5 ? 'tk rl' : 'tk'}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke-width="${major ? 3 : 1.6}" stroke-linecap="round"/>`;
+    if (major) { const [tx, ty] = P(v, 63); ticks += `<text x="${tx.toFixed(1)}" y="${(ty + 5).toFixed(1)}" text-anchor="middle">${Math.round(v)}</text>`; } }
+  const [ax, ay] = P(7.5, 94), [bx, by] = P(9, 94);
+  ticks += `<path class="rl" d="M${ax.toFixed(1)} ${ay.toFixed(1)} A94 94 0 0 1 ${bx.toFixed(1)} ${by.toFixed(1)}" fill="none" stroke-width="4" stroke-linecap="round"/>`;
+  host.classList.add('ign');
+  host.innerHTML = `
+    <span class="ign-hint" aria-hidden="true">Press start · hold to rev</span>
+    <div class="ign-sw"><button class="ign-side ign-lamp" type="button" aria-pressed="false" aria-label="Headlights">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M14.5 6c4 0 6.5 2.7 6.5 6s-2.5 6-6.5 6c-1 0-1.5-.4-1.5-1.3V7.3c0-.9.5-1.3 1.5-1.3z"/><path d="M3 8.5l7 .8M3 12h7M3 15.5l7-.8"/></svg>
+    </button><span>Lights</span></div>
+    <div class="ign-dial">
+      <svg class="ign-tach" viewBox="0 0 200 200" aria-hidden="true">${ticks}
+        <g class="ign-needle"><path d="M98.6 62 L100 12 L101.4 62 Z" fill="#ff5a32"/></g></svg>
+      <button class="ign-start" type="button" aria-label="Engine start and stop. Press to start, hold to rev, tap again to stop"><svg class="ign-pwr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 7.2a7.5 7.5 0 1 0 10.8 0"/></svg><small>Engine</small>Start<small>Stop</small></button>
+      <output class="ign-rpm" aria-live="off">0 RPM</output>
+    </div>
+    <div class="ign-sw"><button class="ign-side ign-snd" type="button" aria-pressed="true" aria-label="Engine sound">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="w" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+    </button><span>Sound</span></div>`;
+  const $ = (s) => host.querySelector(s);
+  const start = $('.ign-start'), needle = $('.ign-needle'), out = $('.ign-rpm'), lampB = $('.ign-lamp'), sndB = $('.ign-snd'), hint = $('.ign-hint');
+  let last = null, hintT = 0, wasRunning = false;
+  const sync = () => shared.all.forEach((h) => { h.lampB.setAttribute('aria-pressed', shared.lamp); h.sndB.setAttribute('aria-pressed', shared.snd); h.sndB.querySelector('.w').style.opacity = shared.snd ? 1 : 0.15; });
+  shared.all.push({ lampB, sndB });
+  const down = (e) => { e?.preventDefault?.(); if (e?.pointerId != null) start.setPointerCapture?.(e.pointerId); start.classList.add('held'); document.querySelectorAll('.ign').forEach((h) => h.classList.add('used')); getKit()?.press(); };
+  const up = () => { if (!start.classList.contains('held')) return; start.classList.remove('held'); getKit()?.release(); };
+  start.addEventListener('pointerdown', down);
+  start.addEventListener('pointerup', up); start.addEventListener('pointercancel', up); start.addEventListener('lostpointercapture', up);
+  start.addEventListener('contextmenu', (e) => e.preventDefault());
+  start.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); down(); } });
+  start.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); up(); } });
+  lampB.addEventListener('click', () => { shared.lamp = !shared.lamp; sync(); getKit()?.setLamp(shared.lamp); });
+  sndB.addEventListener('click', () => { shared.snd = !shared.snd; sync(); getKit()?.setSound(shared.snd); });
+  (function tick() {
+    requestAnimationFrame(tick);
+    const k = getKit();
+    if (k !== last) { last = k; k?.setLamp(shared.lamp); k?.setSound(shared.snd); }
+    const r = k ? k.tach() : 0, st = k ? k.engineState() : 0;
+    needle.style.transform = `rotate(${(-135 + Math.min(9000, Math.max(0, r)) / 9000 * 270).toFixed(2)}deg)`;
+    out.textContent = (Math.round(r / 50) * 50) + ' RPM';
+    host.classList.toggle('lit', st > 0); host.classList.toggle('on', st === 2); host.classList.toggle('red', r > 7500);
+    const running = st === 2;
+    if (running && !wasRunning) { hint.textContent = 'Hold to rev · tap to stop'; hint.classList.remove('off'); hintT = performance.now(); }
+    if (st === 1) hint.classList.add('off');
+    if (running && performance.now() - hintT > 3500) hint.classList.add('off');
+    if (!running && wasRunning) { hint.textContent = 'Press start · hold to rev'; }
+    wasRunning = running;
+  })();
+  sync();
+  return { setLamp: (v) => { shared.lamp = !!v; sync(); getKit()?.setLamp(shared.lamp); } };
+};
+
+
+
+// Prepare a library rim (car-mansion's garage_kit, exported bare): centre it, find its axle (its thin direction) and
+// radius, mark the face for the finish, and give the lip, centre cap and hardware their own metals.
+carKit.prepRim = (THREE, scene) => {
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(scene), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  scene.position.sub(c);
+  const axis = size.y < size.x && size.y < size.z ? 'y' : size.z < size.x ? 'z' : 'x';
+  const radius = Math.max(size.x, size.y, size.z) / 2;
+  const lip = new THREE.MeshPhysicalMaterial({ color: 0xd9dbe0, metalness: 1, roughness: 0.09, clearcoat: 1, clearcoatRoughness: 0.03 });
+  const cap = new THREE.MeshPhysicalMaterial({ color: 0x0b0b0e, metalness: 0.3, roughness: 0.2, clearcoat: 1 });
+  const hw = new THREE.MeshStandardMaterial({ color: 0xb48c3c, metalness: 1, roughness: 0.25 });
+  const rub = new THREE.MeshStandardMaterial({ color: 0x111112, roughness: 0.8 });
+  scene.traverse((m) => {
+    if (!m.isMesh) return; const n = m.material?.name || '';
+    if (/RimGlossBlack/.test(n)) m.userData.face = true;
+    else if (/MachinedLip/.test(n)) m.material = lip;
+    else if (/Medallion/.test(n)) m.material = cap;
+    else if (/SatinGold/.test(n)) m.material = hw;
+    else if (/Rubber/.test(n)) m.material = rub;
+  });
+  // which way the face points: the spokes sit toward the face, the barrel's mass toward the back
+  scene.updateMatrixWorld(true);
+  const ax = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) }[axis];
+  let sum = 0, cnt = 0; const v = new THREE.Vector3();
+  scene.traverse((m) => { if (!m.isMesh || !m.userData.face) return; const p = m.geometry.attributes.position;
+    for (let i = 0; i < p.count; i += 5) { v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld); sum += v.dot(ax); cnt++; } });
+  const faceSign = cnt && sum / cnt < 0 ? -1 : 1;
+  const t = new THREE.Group(); t.add(scene);
+  return { t, axis, radius, faceSign, bead: radius * 0.936, depth: size[axis] };
+};
