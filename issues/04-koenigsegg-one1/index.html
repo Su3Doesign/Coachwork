@@ -1322,6 +1322,7 @@ const stage = scrollStage({
   },
   onFrame: (ctx, pose, dt) => { kit?.frame(pose, dt); },
 });
+stage.ready.catch(() => { $('#loadTxt').textContent = 'Issue 04 · the car could not be loaded'; $('#loader').style.setProperty('--p', 0); });
 
 function chips(sel, list, fn, sw, first = 0) {
   const box = document.querySelector(sel); if (!box || !list?.length) return;

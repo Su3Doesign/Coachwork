@@ -25,14 +25,18 @@ the car rises on its jacks with its wheels hanging, the rims change in a flash, 
 Serve the folder over HTTP (the pages load ES modules and fetch their models): `npx serve .` or
 `python3 -m http.server`. three.js 0.169 loads from jsDelivr; everything else is here.
 
-## What is not in git
+## The models
 
-The five car models are third-party downloads whose licences allow your own renders, not redistribution, so
-`.gitignore` keeps them out: `issues/*/model.glb` and `garage/model-*.glb`, and the AMG side lettering. They are in
-the release zip. To rebuild them: fetch the cars with car-mansion's `scripts/fetch_cars.py`, then export each one with
-`tools/webcar.py <car> <car>.glb --lit` (Blender's Python module, `pip install bpy==4.5.14`, Python 3.11) and copy it
-into place. The forged rims (`rim-*.glb`) are car-mansion's own, modelled in code, and are committed;
-`tools/webrims.py` re-exports them.
+Each car is one file, `issues/<issue>/model.glb`; the garage loads the same files. They were restyled for this site
+(paint, liveries, lamps, wheels) from third-party models:
+
+- Bugatti Chiron: model by Bob Kimani (Kimz Auto).
+- Ferrari 812 Superfast, Koenigsegg Agera, Koenigsegg One:1, Mercedes-AMG Project One: models by their original
+  modellers.
+
+To re-export a car: `tools/webcar.py <car> <car>.glb --lit` (Blender's Python module, `pip install bpy==4.5.14`,
+Python 3.11), from the source models. The forged rims (`rim-*.glb`) are modelled in code; `tools/webrims.py`
+re-exports them.
 
 ## How it works
 
