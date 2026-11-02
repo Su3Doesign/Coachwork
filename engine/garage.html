@@ -29,6 +29,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .ui > * { pointer-events: auto }
 .mast { grid-column: 1 / 4; display: flex; align-items: baseline; gap: 14px }
 .mast b { font-family: var(--head); font-weight: 600; font-size: 22px; letter-spacing: .06em }
+.toc { display: inline-flex; align-items: center; gap: 8px; align-self: center; padding: 7px 12px; border: 1px solid var(--line); color: var(--fg); text-decoration: none; font-size: 10.5px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; background: var(--panel); transition: border-color .2s }
+.toc:hover { border-color: rgba(238,235,240,.45) } .toc svg { width: 12px; height: 12px }
 .mast span { font-family: var(--serif); font-style: italic; font-size: 19px; color: var(--dim) }
 #ign { grid-column: 2; grid-row: 2; align-self: end; justify-self: center; margin-bottom: 4px; --d: 128px; --side: 46px; gap: 14px }
 #ign.driving { gap: 58px }
@@ -64,7 +66,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 @media (max-width: 900px) {
   .ui { grid-template-columns: 1fr auto; grid-template-rows: auto auto 1fr auto auto; gap: 8px }
   .mast { grid-column: 1 / 3 } #ign { grid-column: 1 / 3; grid-row: 3; --d: 92px; --side: 36px; gap: 10px; margin-bottom: 0 }
-  #ign.driving { gap: 44px } #ign .ign-pad { width: 26px; height: 44px; margin-top: -22px; font-size: 19px } #ign .ign-dn { left: -36px } #ign .ign-up { right: -36px }
+  #ign.driving { gap: 44px } #ign .ign-pad { width: 26px; height: 44px; margin-top: -22px; font-size: 19px } #ign .ign-dn { left: -36px } #ign .ign-up { right: -36px } #ign .ign-pedal { width: 34px; height: 22px; top: calc(50% + 26px) } #ign .ign-brk { left: -40px } #ign .ign-gas { right: -40px }
   .mast b { font-size: 18px }
   .cars { grid-column: 1 / 3; grid-row: 2; display: flex; overflow-x: auto; padding: 8px; gap: 4px } .cars .lab { display: none }
   .car { flex: 0 0 auto; grid-template-columns: auto auto; padding: 6px 10px 6px 8px } .car i { display: none } .car b { font-size: 14px }
@@ -80,7 +82,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 <div class="loader lab" id="loader"><span id="loadTxt">Opening the garage</span><i></i></div>
 
 <div class="ui">
-  <header class="mast"><b>COACHWORK</b><span>Garage library · a supplement to issues 01–05</span></header>
+  <header class="mast"><a class="toc" href="%%CONTENTS%%" target="_blank" rel="noopener" aria-label="Contents: all issues"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6"/><rect x="9" y="1" width="6" height="6"/><rect x="1" y="9" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/></svg>Contents</a><b>COACHWORK</b><span>Garage library · a supplement to issues 01–05</span></header>
   <nav class="panel cars" id="cars" aria-label="Cars"><span class="lab">The cars</span></nav>
   <div class="panel views" id="views" aria-label="Views"><span class="lab">Views</span></div>
   <div class="ignbox" id="ign" role="group" aria-label="Engine, lights and sound"></div>

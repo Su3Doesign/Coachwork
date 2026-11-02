@@ -61,6 +61,10 @@ section, article, footer { position: relative }
 /* the ignition: a start button in a rev counter, lights and sound beside it. A big one on the cover (above the car, so
    nothing covers it) and in the After Dark spread; a compact gauge cluster in the top bar for the rest of the read */
 .bar-r { justify-self: end; display: flex; align-items: center; gap: 20px }
+.toc { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; opacity: .75; transition: opacity .3s } .toc:hover { opacity: 1 }
+.toc svg { width: 14px; height: 14px }
+.cover-toc { position: absolute; z-index: 6; right: max(40px, env(safe-area-inset-right, 0px)); top: max(34px, env(safe-area-inset-top, 0px)); color: var(--ink); text-decoration: none; display: inline-flex; gap: 10px; align-items: center; padding: 8px 14px; border: 1px solid var(--line); background: color-mix(in srgb, var(--paper-2) 70%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px) }
+.cover-toc:hover { border-color: var(--ink) }
 #dock { --d: 40px; --side: 28px; gap: 8px }
 #ign1 { position: relative; z-index: 5; margin-top: 52px; --d: 116px; --side: 44px; gap: 14px; --ign-label: var(--dim); width: max-content; opacity: 0; transition: opacity 1s .4s }
 .stage-ready #ign1 { opacity: 1 }
@@ -180,7 +184,8 @@ section, article, footer { position: relative }
   .night { padding-bottom: 40vh } .back { padding-bottom: 110px }
   #ign1 { --d: 100px; --side: 40px; gap: 12px; margin-top: 46px }
   #ign2 { --d: 124px; --side: 44px; margin-top: 58px }
-  .bar-r { gap: 12px } .bar .mast span { display: none }
+  .bar-r { gap: 12px } .bar .mast span { display: none } .toc span { display: none }
+  .cover-toc { right: max(18px, env(safe-area-inset-right, 0px)); top: max(14px, env(safe-area-inset-top, 0px)) }
   .folio, .cue { bottom: 90px }
 }
 @media (prefers-reduced-motion: reduce) { .cue::after { animation: none } .rv-on .rv { transform: none; opacity: 1 } }
@@ -192,7 +197,7 @@ section, article, footer { position: relative }
 <header class="bar g lab" id="bar">
   <a class="mast" href="#cover">COACHWORK <span class="dim" style="font-family:var(--thin);font-weight:400;letter-spacing:.2em;font-size:11px">· Issue %%ISSUE%%</span></a>
   <nav><a href="#sheet">Build sheet</a><a href="#design">Design</a><a href="#details">Details</a><a href="#night">After dark</a><a href="#final">Final</a></nav>
-  <div class="bar-r"><div id="dock" class="mini" role="group" aria-label="Engine, lights and sound"></div><span class="pg" id="pg">01 / 06</span></div>
+  <div class="bar-r"><a class="toc" href="%%CONTENTS%%" target="_blank" rel="noopener" aria-label="Contents: all issues"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6"/><rect x="9" y="1" width="6" height="6"/><rect x="1" y="9" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/></svg><span>Contents</span></a><div id="dock" class="mini" role="group" aria-label="Engine, lights and sound"></div><span class="pg" id="pg">01 / 06</span></div>
   <span class="prog" id="prog"></span>
 </header>
 
@@ -212,6 +217,7 @@ section, article, footer { position: relative }
   <div id="ign1" role="group" aria-label="Engine, lights and sound"></div>
   <span class="cue lab">Scroll</span>
   <span class="folio">1</span>
+  <a class="cover-toc lab" href="%%CONTENTS%%" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6"/><rect x="9" y="1" width="6" height="6"/><rect x="1" y="9" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/></svg>All issues</a>
 </section>
 
 <section class="sheet spread-dark nofade-bottom" id="sheet">
@@ -280,6 +286,7 @@ section, article, footer { position: relative }
   </div>
   <footer class="back g" %%P_AWAY%%>
     <a class="next rv" href="%%NEXTHREF%%" target="_blank" rel="noopener"><span class="lab" style="color:var(--dim)">Next issue · %%NEXTNO%%</span><b>%%NEXTNAME%% →</b></a>
+    <a class="next rv" href="%%CONTENTS%%" target="_blank" rel="noopener" style="margin-top:-24px"><span class="lab" style="color:var(--dim)">Or</span><b style="font-size:clamp(26px,3vw,44px)">All issues ↗</b></a>
     <div class="colophon lab"><span>Coachwork · Issue %%ISSUE%%</span><span>A portfolio piece. Car models are third-party; names and marks belong to their makers.</span><span>6</span></div>
   </footer>
 </section>

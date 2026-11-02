@@ -241,7 +241,7 @@ def page(key, links):
         'INK': c['ink'], 'ACCENT': c['accent'], 'PAPER': c['paper'], 'PAPER2': c['paper2'], 'DARK': c['dark'], 'DARK2': c['dark2'],
         'INTRO': e(c['intro']), 'SPECS': spec_rows, 'NOTE': e(c['note']), 'DESIGN': design, 'PAINTS': paints_block, 'DETAILS': details,
         'NIGHT1': e(n1), 'NIGHT2': e(n2), 'NIGHT3': e(n3), 'FINAL': e(c['final']), 'NEXTNO': nc['no'], 'NEXTNAME': e(f"{nc['make']} {nc['name']}"),
-        'NEXTHREF': next_href, 'CFG': json.dumps(cfg),
+        'NEXTHREF': next_href, 'CONTENTS': links.get('contents', '#'), 'CFG': json.dumps(cfg),
         'P_COVER': pose('cover'), 'P_SIDE': pose('side'), 'P_FRONT': pose('frontv'), 'P_TOP': pose('top'), 'P_STANCE': pose('stance'),
         'P_FINISH': pose('finish'), 'P_REAR': pose('rear34'), 'P_NIGHT': pose('night'), 'P_FINAL': pose('final'), 'P_AWAY': pose('away'),
         'ALT': e(f"{title} ({c['year']}), shown in 3D"),

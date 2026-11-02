@@ -5,7 +5,20 @@
 function carKit(ctx, cfg) {
   const { THREE } = ctx;
   const front = ctx.opt.front;
-  const world = (o) => new THREE.Box3().setFromObject(o);
+  // boxes measured on the vertices, not on a part's own box turned with it (a rotated part's box comes out far too
+  // big: the Chiron's rims then never met their wheels); cached, taken with the car at rest
+  const boxCache = new Map(), _v = new THREE.Vector3();
+  const world = (o) => {
+    if (!o.isMesh) return new THREE.Box3().setFromObject(o, true);
+    let b = boxCache.get(o);
+    if (!b) {
+      b = new THREE.Box3(); o.updateWorldMatrix(true, false);
+      const pos = o.geometry.attributes.position, ids = o.userData.split ? o.geometry.index.array : null, n = ids ? ids.length : pos.count, step = Math.max(1, Math.floor(n / 20000));
+      for (let i = 0; i < n; i += step) b.expandByPoint(_v.fromBufferAttribute(pos, ids ? ids[i] : i).applyMatrix4(o.matrixWorld));
+      boxCache.set(o, b);
+    }
+    return b.clone();
+  };
   const meshes = []; ctx.model.traverse((m) => { if (m.isMesh) meshes.push(m); });
   // remember each mesh's original material name: roles and anchors are found by it, before any override
   for (const m of meshes) m.userData.mat0 = (Array.isArray(m.material) ? m.material[0] : m.material)?.name || '';
@@ -169,7 +182,7 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
       g2.boundingBox = bb; g2.boundingSphere = bb.getBoundingSphere(new THREE.Sphere());
       const part = new THREE.Mesh(g2, m.material); part.name = m.name + '_' + buckets.size + '_' + tyreMeshes.length;
       part.position.copy(m.position); part.quaternion.copy(m.quaternion); part.scale.copy(m.scale);
-      part.userData.mat0 = m.userData.mat0; m.parent.add(part); part.updateMatrixWorld(true);
+      part.userData.mat0 = m.userData.mat0; part.userData.split = true; m.parent.add(part); part.updateMatrixWorld(true);
       meshes.push(part); tyreMeshes.push(part);
     }
     m.parent.remove(m); meshes.splice(meshes.indexOf(m), 1);
@@ -265,7 +278,7 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
         g2.boundingBox = bb; g2.boundingSphere = bb.getBoundingSphere(new THREE.Sphere());
         const part = new THREE.Mesh(g2, m.material); part.name = m.name + '_w' + meshes.length;
         part.position.copy(m.position); part.quaternion.copy(m.quaternion); part.scale.copy(m.scale);
-        part.userData.mat0 = m.userData.mat0; m.parent.add(part); part.updateMatrixWorld(true); meshes.push(part);
+        part.userData.mat0 = m.userData.mat0; part.userData.split = true; m.parent.add(part); part.updateMatrixWorld(true); meshes.push(part);
         if (rims.includes(m)) rims.push(part);
       }
       m.parent.remove(m); meshes.splice(meshes.indexOf(m), 1);
@@ -298,6 +311,7 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
     else if (/Tyre/.test(n)) hub.attach(m);          // a tyre shared by an axle
   }
   ctx.pivots = pivots;
+  for (const m of meshes) world(m);
   const body = new THREE.Group(); ctx.wrap.add(body);
   body.position.set(0, (sz.y * 0.4) / ctx.scale, 0); body.updateMatrixWorld(true); body.attach(ctx.model);
   const body0 = body.position.clone();
@@ -365,7 +379,7 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
       if (/Tyre|_Paint$|_Body$|_green_hell$/.test(n)) return;
       if (/Brake|Disc|Caliper/.test(n)) {
         // a real brake sits inboard of the hub face; one modelled out past it would show through any rim
-        const b = new THREE.Box3().setFromObject(m);
+        const b = world(m);
         const out = wheels.some((w) => Math.abs((b.min.z + b.max.z) / 2 - w.z) < w.r && Math.abs((b.min.y + b.max.y) / 2 - w.y) < w.r &&
           (w.x > 0 ? b.max.x > w.x + w.width * 0.15 : b.min.x < w.x - w.width * 0.15));
         if (out) { m.visible = false; hidden.push(m); }
@@ -373,7 +387,7 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
       }
       let near = false;
       if (!FACTORY_RE.test(n)) {
-        const b = new THREE.Box3().setFromObject(m), c = b.getCenter(new THREE.Vector3()), s2 = b.getSize(new THREE.Vector3());
+        const b = world(m), c = b.getCenter(new THREE.Vector3()), s2 = b.getSize(new THREE.Vector3());
         near = wheels.some((w) => c.distanceTo(new THREE.Vector3(w.x, w.y, w.z)) < w.r * 0.55 && Math.max(s2.y, s2.z) < w.r * 2.2);
       }
       if (FACTORY_RE.test(n) || near) { m.visible = false; hidden.push(m); }
@@ -638,8 +652,19 @@ void main() { vec2 p = vUv - 0.5; float r = length(p) * 2.0; float k = exp(-pow(
   const rd = -front;                                       // the rear: where the road and the wind go
   const TOP = E.top || 330, Z100 = E.z100 || 3, kTop = TOP / (E.redline / 1000);
   const KPH = [...Array(7)].map((_, i) => kTop * Math.pow(0.27, (6 - i) / 6));
-  let latch = false, drive = false, gear = 1, speed = 0, accel = 0, shiftT = 0, shiftDir = 0, roadOff = 0, surge = 0, surgeV = 0, refused = 0;
-  let road = null, leaves = null, blurs = null;
+  let pedal = false, braking = false, latch = false, drive = false, gear = 1, speed = 0, accel = 0, shiftT = 0, shiftDir = 0, roadOff = 0, surge = 0, surgeV = 0, refused = 0;
+  let road = null, leaves = null, blurs = null, discs = null;
+  function makeDiscs() {
+    const list = [];
+    for (const m of meshes) {
+      if (!/Brake|Disc|Rotor/.test(matName(m)) || /Caliper/.test(matName(m))) continue;
+      const c = world(m).getCenter(new THREE.Vector3());
+      let wi = 0, bd = 1e9; wheels.forEach((w, i) => { const d = c.distanceTo(new THREE.Vector3(w.x, w.y, w.z)); if (d < bd) { bd = d; wi = i; } });
+      const mat = m.material.clone(); mat.emissive = new THREE.Color(0.85, 0.09, 0.008); mat.emissiveIntensity = 0; m.material = mat;
+      list.push({ mat, wi });
+    }
+    return { list, heat: wheels.map(() => 0) };
+  }
   const hw = sz.x / 2, hl = sz.z / 2;
   function makeRoad() {
     const R = Math.hypot(sz.x, sz.z) * 0.56 * 1.6;
@@ -661,7 +686,7 @@ vec3 asphalt(vec2 q) {
 }
 void main() {
   vec3 c = vec3(0.0);
-  for (int i = 0; i < 8; i++) { float t = (float(i) / 7.0 - 0.5) * uBlur; c += asphalt(vec2(vP.x, -vP.y + uOff + t)); }
+  for (int i = 0; i < 8; i++) { float t = (float(i) / 7.0 - 0.5) * uBlur; c += asphalt(vec2(vP.x, -vP.y - uOff + t)); }
   c /= 8.0;
   float r = length(vP) / uR, a = uA * (1.0 - smoothstep(0.62, 1.0, r));
   gl_FragColor = vec4(c, a);
@@ -758,9 +783,14 @@ void main() {
   api.setDrive = (on) => {
     on = !!on; if (on === drive) return;
     drive = on; if (!on && latch) { latch = false; held = false; }
-    if (drive) { if (!engine) api.start(); gear = 1; if (!road) road = makeRoad(); if (!blurs) blurs = makeBlurs(); }
+    if (drive) { if (!engine) api.start(); gear = 1; if (!road) road = makeRoad(); if (!blurs) blurs = makeBlurs(); if (!discs) discs = makeDiscs(); }
+    else { braking = false; pedal = false; }
   };
   api.drive = () => drive;
+  api.brake = (v) => { braking = !!v && drive; };
+  api.braking = () => braking;
+  api.throttle = (v) => { pedal = !!v && drive; if (pedal) { startAudio(); audio?.ac.resume?.(); } };
+  api.heat = () => (discs ? Math.max(...discs.heat) : 0);
   api.latched = () => latch;
   api.gear = () => gear;
   api.speed = () => speed;
@@ -787,7 +817,8 @@ void main() {
       const rn = THREE.MathUtils.clamp((rw - E.idle) / (E.redline - E.idle), 0, 1);
       const pull = (100 / Z100) * 1.35 * Math.pow(KPH[0] / k, 0.85) * (0.78 + 0.32 * Math.sin(Math.PI * Math.min(1, rn * 1.1)));
       const drag = (100 / Z100) * 1.35 * Math.pow(KPH[0] / KPH[6], 0.85) * 0.95 * Math.pow(speed / TOP, 2);
-      if (throttle && shiftT <= 0 && rw < E.redline) accel = pull - drag;
+      if (braking) accel = -((100 / Z100) * 1.45 * Math.min(1, 0.4 + speed / 60) + drag);       // about 1.3 g, softer at a crawl
+      else if (throttle && shiftT <= 0 && rw < E.redline) accel = pull - drag;
       else accel = -(2 + 2.5 * Math.pow(KPH[0] / k, 0.5) * (throttle ? 0 : 1) + drag);
       speed = Math.max(0, speed + accel * dt);
       erpm = Math.max(rw, throttle ? Math.min(E.redline, 2600 + rw * 0.4) : E.idle);   // below the launch revs the clutch slips
@@ -799,13 +830,20 @@ void main() {
     surgeV += (-60 * surge - 9 * surgeV) * dt; surge += surgeV * dt;
     ctx.wrap.position.z = surge * 0.04 * -rd;
     roadOff += speed / 3.6 / L_REAL * dt;
-    if (road) { road.u.uOff.value = roadOff; road.u.uBlur.value = Math.min(0.5, speed / 3.6 / 60 / L_REAL * 1.6); }
+    if (road) { road.u.uOff.value = rd * roadOff; road.u.uBlur.value = Math.min(0.5, speed / 3.6 / 60 / L_REAL * 1.6); }
     const omega = speed / 3.6 / ((wheels[0]?.r || 0.07) * L_REAL);                   // the wheels' turn, radians a second
     if (omega) for (const p of pivots) p.pivot.rotateX(front * omega * dt);
     if (blurs) {
       blurs.mat.opacity = THREE.MathUtils.smoothstep(omega, 14, 60) * 0.88;
       blurs.mat.color.copy(api.forged && forgedMat ? forgedMat.color : (rimMat?.color || new THREE.Color(0x222226))).lerp(new THREE.Color(0xb0b0b4), 0.35);
       for (const d of blurs.list) d.visible = blurs.mat.opacity > 0.01;
+    }
+    if (discs) {                                            // heat: braking at speed builds it, the air takes it away
+      discs.heat = discs.heat.map((h, i) => {
+        const frontAxle = wheels[i].z * front > 0, gain = braking && speed > 2 ? Math.pow(speed / 120, 1.4) * (frontAxle ? 0.65 : 0.45) : 0;
+        return THREE.MathUtils.clamp(h + (gain - h * (0.07 + speed / 2500)) * dt, 0, 1.3);
+      });
+      for (const d of discs.list) { const k = THREE.MathUtils.smoothstep(discs.heat[d.wi], 0.18, 1); d.mat.emissiveIntensity = k * 2.4; d.mat.emissive.setRGB(0.85, 0.09 + 0.12 * k * k, 0.008); }   // dull red, then orange as it gets hotter
     }
     runLeaves(dt);
     return erpm;
@@ -859,7 +897,7 @@ void main() {
       else if (engT < 1.05) { tach = 260 + Math.sin(engT * 70) * 60; S.vr += Math.sin(engT * 70) * 0.004; }  // the starter turns it over
       else { engine = 2; rpm = 0.36; S.vr += 0.12 * front; S.vy -= sz.y * 0.08; }         // it catches with a flare
     }
-    const throttle = engine === 2 && held ? 1 : 0;
+    const throttle = engine === 2 && (held || pedal) && !braking ? 1 : 0;
     cut = Math.max(0, cut - dt);
     const driven = runDrive(dt, throttle);
     if (driven !== null) {                                  // on the road: the revs follow the wheels through the gear
@@ -895,7 +933,7 @@ void main() {
     // tails are always softly lit (a parked car with its lights on), and burn when the lights come on;
     // headlamps only wake with the lights. Values are HDR: the bloom picks up what passes 1.0
     for (const m of lampsF) m.material.emissiveIntensity = 0.02 + lampLevel * 9;
-    for (const m of lampsT) m.material.emissiveIntensity = (m.material.userData.lamp === 'tailLED' ? 1.2 : 0.35) + lampLevel * 7;
+    for (const m of lampsT) m.material.emissiveIntensity = (m.material.userData.lamp === 'tailLED' ? 1.2 : 0.35) + lampLevel * 7 + (braking ? 6 : 0);
     pool.material.opacity = lampLevel * Math.max(0, 1 - pose.env) * 0.9;
     const spin = drive ? 0 : pose.spin * dt;
     if (spin) for (const p of pivots) p.pivot.rotateX(front * spin);
@@ -966,13 +1004,19 @@ carKit.ignition = (host, getKit, opts = {}) => {
 .ign-pad { all: unset; cursor: pointer; position: absolute; top: 50%; width: 32px; height: 52px; margin-top: -26px; display: none; place-items: center; font: 500 22px/1 Oswald, "Arial Narrow", sans-serif; color: #ece8f0;
   background: linear-gradient(#34343b, #131316); border-radius: 9px; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 8px 18px rgba(0,0,0,.5); transition: background-color .15s, transform .1s; touch-action: manipulation; user-select: none; -webkit-user-select: none }
 .ign-dn { left: -46px } .ign-up { right: -46px }
+.ign-pedal { all: unset; cursor: pointer; position: absolute; top: calc(50% + 32px); width: 40px; height: 26px; display: none; place-items: center; font: 600 8.5px/1 "Jost", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #ece8f0;
+  background: repeating-linear-gradient(90deg, #26262c 0 3px, #1a1a1f 3px 6px); border-radius: 6px; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 6px 14px rgba(0,0,0,.5); touch-action: none; user-select: none; -webkit-user-select: none; transition: background-color .1s, transform .1s }
+.ign-brk { left: -50px } .ign-gas { right: -50px }
+.ign.driving .ign-pedal { display: grid }
+.ign-brk.on { background: #b3261e; transform: scale(.94) } .ign-gas.on { background: #2f8f4e; transform: scale(.94) }
+.ign-pedal:focus-visible { outline: 2px solid var(--accent, #fff); outline-offset: 3px }
 .ign.driving .ign-pad { display: grid }
 .ign-pad:active, .ign-pad.hit { transform: scale(.92); background: var(--accent, #d33) } .ign-pad.no { background: #8a1c14 }
 .ign-pad:focus-visible { outline: 2px solid var(--accent, #fff); outline-offset: 3px }
 .ign-drv[aria-pressed="true"] { color: #fff; box-shadow: 0 0 0 1px var(--accent, #fff), 0 0 0 4px rgba(14,14,17,.55), 0 0 18px color-mix(in srgb, var(--accent, #fff) 60%, transparent), 0 10px 24px rgba(0,0,0,.45) }
 .ign.mini .ign-pwr { display: block }
 .ign.mini .ign-start { font-size: 0; gap: 0; box-shadow: 0 0 0 1px #2b2b31, 0 0 0 2.5px var(--ring, rgba(214,150,40,.6)), 0 0 8px var(--glow, rgba(214,150,40,.2)), inset 0 1px 2px rgba(255,255,255,.16) }
-.ign.mini .ign-lbl, .ign.mini .ign-gr, .ign.mini .ign-pad, .ign.mini .ign-start small, .ign.mini .ign-sw span, .ign.mini .ign-hint, .ign.mini .ign-rpm, .ign.mini .ign-ex, .ign.mini .ign-tach text { display: none }
+.ign.mini .ign-lbl, .ign.mini .ign-gr, .ign.mini .ign-pad, .ign.mini .ign-pedal, .ign.mini .ign-start small, .ign.mini .ign-sw span, .ign.mini .ign-hint, .ign.mini .ign-rpm, .ign.mini .ign-ex, .ign.mini .ign-tach text { display: none }
 .ign.mini .ign-dial, .ign.mini .ign-side { box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 3px 9px rgba(0,0,0,.35) }
 .ign.mini .ign-side[aria-pressed="true"].ign-lamp { box-shadow: 0 0 0 1px rgba(220,235,255,.5), 0 0 12px rgba(160,195,255,.65) }
 .ign.mini:not(.used) .ign-start::after { inset: -5px }
@@ -1004,7 +1048,7 @@ carKit.ignition = (host, getKit, opts = {}) => {
       <svg class="ign-tach" viewBox="0 0 200 200" aria-hidden="true"><g class="ign-ticks">${dial(9, 7.5)}</g>
         <g class="ign-needle"><path d="M98.6 62 L100 12 L101.4 62 Z" fill="#ff5a32"/></g></svg>
       <button class="ign-start" type="button" aria-label="Engine start and stop. Press to start, hold to rev, tap again to stop"><svg class="ign-pwr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 7.2a7.5 7.5 0 1 0 10.8 0"/></svg><span class="ign-lbl"><small>Engine</small>Start<small>Stop</small></span><span class="ign-gr"><small>Gear</small><b>1</b><small>Tap · gas</small></span></button>
-      ${opts.drive ? '<button class="ign-pad ign-dn" type="button" aria-label="Shift down">&minus;</button><button class="ign-pad ign-up" type="button" aria-label="Shift up">+</button>' : ''}
+      ${opts.drive ? '<button class="ign-pad ign-dn" type="button" aria-label="Shift down">&minus;</button><button class="ign-pad ign-up" type="button" aria-label="Shift up">+</button><button class="ign-pedal ign-brk" type="button" aria-label="Brake (hold)">Brake</button><button class="ign-pedal ign-gas" type="button" aria-label="Gas (hold)">Gas</button>' : ''}
       <span class="ign-ex" aria-hidden="true"></span>
       <output class="ign-rpm" aria-live="off">0 RPM</output>
     </div>
@@ -1019,14 +1063,25 @@ carKit.ignition = (host, getKit, opts = {}) => {
   const shift = (d) => { const k = getKit(); if (!k?.drive?.()) return; flash(d > 0 ? upB : dnB, k.shift(d) ? 'hit' : 'no'); };
   drvB?.addEventListener('click', () => { const k = getKit(); if (!k?.setDrive) return; host.classList.add('used'); k.setDrive(!k.drive()); });
   dnB?.addEventListener('click', () => shift(-1)); upB?.addEventListener('click', () => shift(1));
+  // the pedals: held, with a finger or the mouse (each its own pointer, so a thumb can brake while the other shifts)
+  const pedalB = (b, fn) => { if (!b) return; const on = (v) => (e) => { e?.preventDefault?.(); if (v && e?.pointerId != null) b.setPointerCapture?.(e.pointerId); b.classList.toggle('on', v); fn(v); };
+    b.addEventListener('pointerdown', on(true)); for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, on(false)); b.addEventListener('contextmenu', (e) => e.preventDefault()); };
+  pedalB($('.ign-brk'), (v) => getKit()?.brake?.(v)); pedalB($('.ign-gas'), (v) => getKit()?.throttle?.(v));
   if (opts.drive) {                                          // keys: arrows or Q / E shift, the space bar is the throttle
     addEventListener('keydown', (e) => {
       const k = getKit(); if (!k?.drive?.() || e.target.closest?.('button, input, select, textarea')) return;
       if (e.key === 'ArrowUp' || e.key === 'e' || e.key === 'E') { e.preventDefault(); shift(1); }
       else if (e.key === 'ArrowDown' || e.key === 'q' || e.key === 'Q') { e.preventDefault(); shift(-1); }
       else if (e.key === ' ' && !e.repeat) { e.preventDefault(); down(); }
+      else if ((e.key === 'b' || e.key === 'B' || e.key === 's' || e.key === 'S') && !e.repeat) { k.brake(true); $('.ign-brk')?.classList.add('on'); }
+      else if ((e.key === 'w' || e.key === 'W') && !e.repeat) { k.throttle(true); $('.ign-gas')?.classList.add('on'); }
     });
-    addEventListener('keyup', (e) => { if (e.key === ' ' && getKit()?.drive?.()) { e.preventDefault(); up(); } });
+    addEventListener('keyup', (e) => {
+      const k = getKit(); if (!k?.drive?.()) return;
+      if (e.key === ' ') { e.preventDefault(); up(); }
+      else if (/^[bBsS]$/.test(e.key)) { k.brake(false); $('.ign-brk')?.classList.remove('on'); }
+      else if (/^[wW]$/.test(e.key)) { k.throttle(false); $('.ign-gas')?.classList.remove('on'); }
+    });
   }
   let last = null, hintT = 0, wasRunning = false;
   const sync = () => shared.all.forEach((h) => { h.lampB.setAttribute('aria-pressed', shared.lamp); h.sndB.setAttribute('aria-pressed', shared.snd); h.sndB.querySelector('.w').style.opacity = shared.snd ? 1 : 0.15; });
@@ -1054,7 +1109,7 @@ carKit.ignition = (host, getKit, opts = {}) => {
     out.textContent = driving ? Math.round(k.speed()) + ' KM/H' : (Math.round(r / 50) * 50) + ' RPM';
     host.classList.toggle('driving', driving); drvB?.setAttribute('aria-pressed', driving); start.classList.toggle('latched', !!k?.latched?.());
     if (driving && gearEl.textContent !== String(k.gear())) gearEl.textContent = k.gear();
-    if (driving && !wasDriving) { hint.textContent = 'Tap for gas, tap again to lift · + and − shift'; hint.classList.remove('off'); hintT = performance.now() + 2000; }
+    if (driving && !wasDriving) { hint.textContent = 'Tap for gas, tap again to lift · hold Brake · + and − shift'; hint.classList.remove('off'); hintT = performance.now() + 2000; }
     wasDriving = driving;
     host.classList.toggle('lit', st > 0); host.classList.toggle('on', st === 2); host.classList.toggle('red', r > red * 0.94);
     const running = st === 2;

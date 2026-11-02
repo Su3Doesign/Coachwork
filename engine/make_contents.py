@@ -18,6 +18,9 @@ def build(links):
                    f'<i>{e(c["tagline"])}</i></span><span class="y">{c["year"]}</span></a>')
     issues += (f'<a class="item" href="{e(links.get("garage", "#"))}" target="_blank" rel="noopener" style="--c:#c9a24c">'
                f'<span class="no">+</span><span class="t"><b>Garage library</b><i>All five cars in one page, and a wall of forged rims to fit them.</i></span><span class="y">Supplement</span></a>')
+    if links.get('case'):
+        issues += (f'<a class="item" href="{e(links["case"])}" target="_blank" rel="noopener" style="--c:#8f5fd6">'
+                   f'<span class="no">00</span><span class="t"><b>The making of</b><i>How Coachwork was designed and built, and what broke on the way.</i></span><span class="y">Case study</span></a>')
     return f'''<title>Coachwork Contents</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300..700&family=Jost:wght@300;400;500&family=Cormorant+Garamond:ital,wght@1,500&display=swap">
@@ -46,7 +49,7 @@ h2 {{ margin: 40px 0 0; font-size: 11px; font-weight: 500; letter-spacing: .28em
 </style>
 <header class="mast"><b>COACHWORK</b><span>Issues 01–05 · 2026</span></header>
 <h1>Contents</h1>
-<p class="lede">Five cars in 3D that move with the scroll, in front of the words, and a garage to fit them with new wheels.</p>
+<p class="lede">Five cars in 3D that move with the scroll, in front of the words, a garage to fit them with new wheels, and the story of how it was made.</p>
 <h2>The magazine · five issues</h2>
 {issues}
 <div class="foot"><span>Each page opens in a new tab</span><span>Car models are third-party; names and marks belong to their makers</span></div>
