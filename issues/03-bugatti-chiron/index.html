@@ -392,7 +392,8 @@ function scrollStage(o) {
   ctx.ready = new Promise((resolve, reject) => {
     const fail = (e) => { console.error(e); document.documentElement.classList.add('stage-error'); reject(e); };
     const done = (g) => { try { onModel(g); resolve(ctx); } catch (e) { fail(e); } };
-    const prog = (e) => { if (e.total) opt.onProgress?.(e.loaded / e.total); };
+    // capped: a server that compresses the file reports its smaller size as the total
+    const prog = (e) => { if (e.total) opt.onProgress?.(Math.min(1, e.loaded / e.total)); };
     if (/\.txt$/.test(opt.url)) {
       new THREE.FileLoader().setResponseType('text').load(opt.url, (txt) => {
         const bin = atob(txt.trim()); const buf = new Uint8Array(bin.length);
