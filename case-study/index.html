@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Making Coachwork</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300..700&family=Jost:wght@300;400;500&family=Cormorant+Garamond:ital,wght@1,500&family=Poppins:wght@400;500;600&display=swap">
+<style>
+/* Layout: the magazine's own "issue 00": a masthead, then chapters in the order the work happened, a slim index
+   that follows you on wide screens, figures that break wider than the text, one dark spread for the sound. */
+:root {
+  --paper: #e9e6ec;          /* the issues' violet-grey paper */
+  --paper-2: #f6f4f8;
+  --ink: #19161c;
+  --dim: #625d69;
+  --line: rgba(25, 22, 28, .16);
+  --accent: #5b2a86;         /* issue 01's purple */
+  --night: #141017;          /* the after-dark spreads */
+  --night-fg: #ece7f1;
+  --night-dim: #a59eae;
+  --head: "Oswald", "Arial Narrow", Impact, sans-serif;
+  --thin: "Jost", "Futura", "Century Gothic", sans-serif;
+  --serif: "Cormorant Garamond", Georgia, serif;
+  --body: "Poppins", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #151218; --paper-2: #1d1921; --ink: #ece7f1; --dim: #a59eae; --line: rgba(236, 231, 241, .16); --accent: #b48ce6;
+  --night: #0b090d; --night-fg: #ece7f1; --night-dim: #a59eae; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #151218; --paper-2: #1d1921; --ink: #ece7f1; --dim: #a59eae; --line: rgba(236, 231, 241, .16); --accent: #b48ce6;
+  --night: #0b090d; --night-fg: #ece7f1; --night-dim: #a59eae; color-scheme: dark }
+
+* { box-sizing: border-box }
+html { background: var(--paper) }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.7; -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+a { color: inherit }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px }
+img { display: block; max-width: 100%; height: auto }
+.lab { font-family: var(--thin); font-weight: 500; font-size: 11px; letter-spacing: .26em; text-transform: uppercase }
+
+.wrap { max-width: 1160px; margin-inline: auto }
+.mast { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-block: 28px 12px; border-bottom: 1.5px solid var(--ink) }
+.mast b { font-family: var(--head); font-weight: 600; font-size: 20px; letter-spacing: .06em }
+.mast a { text-decoration: none }
+
+/* the opener */
+.open { padding-block: 56px 28px; display: grid; gap: 22px }
+.open h1 { margin: 0; font-family: var(--head); font-weight: 600; font-size: clamp(64px, 12vw, 176px); line-height: .82; text-transform: uppercase; letter-spacing: -.005em; text-wrap: balance }
+.open h1 span { color: var(--accent) }
+.lede { margin: 0; max-width: 30ch; font-family: var(--serif); font-style: italic; font-weight: 500; font-size: clamp(22px, 2.4vw, 32px); line-height: 1.25 }
+.meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line) }
+.meta div { padding: 14px 16px 14px 0; display: grid; gap: 4px; min-width: 0 }
+.meta div + div { padding-left: 16px; border-left: 1px solid var(--line) }
+.meta span { color: var(--dim) }
+.meta b { font-weight: 500; font-size: 14.5px }
+.hero { margin: 8px 0 0 }
+figure { margin: 0; display: grid; gap: 10px }
+figure img { width: 100%; border: 1px solid var(--line); background: var(--night) }
+figcaption { font-size: 13px; line-height: 1.5; color: var(--dim); max-width: 70ch }
+figcaption b { font-family: var(--thin); font-weight: 500; letter-spacing: .2em; text-transform: uppercase; font-size: 10.5px; color: var(--ink); margin-right: 8px }
+
+/* the body: an index rail and the chapters */
+.body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 56px; padding-block: 56px 40px }
+.index { position: sticky; z-index: 2; top: calc(24px + env(safe-area-inset-top, 0px)); align-self: start; display: grid; gap: 2px; padding: 14px; margin: -14px;
+  background: color-mix(in srgb, var(--paper) 90%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px) }
+.index .lab { color: var(--dim); margin-bottom: 10px }
+.index a { display: grid; grid-template-columns: 30px 1fr; gap: 6px; padding: 5px 0; text-decoration: none; font-size: 13.5px; color: var(--dim); transition: color .2s }
+.index a i { font-style: normal; font-family: var(--head); font-weight: 300; color: var(--accent) }
+.index a:hover, .index a.on { color: var(--ink) }
+.chapters { display: grid; gap: 88px; min-width: 0 }
+.ch { display: grid; gap: 22px; scroll-margin-top: 24px; min-width: 0 }
+.ch header { display: grid; gap: 8px }
+.ch .no { font-family: var(--head); font-weight: 300; font-size: 15px; letter-spacing: .1em; color: var(--accent) }
+.ch h2 { margin: 0; font-family: var(--head); font-weight: 600; font-size: clamp(40px, 5.4vw, 76px); line-height: .9; text-transform: uppercase; text-wrap: balance }
+.ch .kick { margin: 0; font-family: var(--serif); font-style: italic; font-size: clamp(20px, 2vw, 26px); line-height: 1.3; max-width: 40ch; color: var(--dim) }
+.ch p { margin: 0; max-width: 66ch }
+.ch p + p { margin-top: -6px }
+.ch strong { font-weight: 600 }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px }
+.phone-pair { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(0, 1fr); gap: 18px; align-items: end }
+
+/* the five cars */
+.cars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line) }
+.cars div { padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0 }
+.cars div + div { border-left: 1px solid var(--line) }
+.cars i { width: 100%; height: 10px; background: var(--sw) }
+.cars b { font-family: var(--head); font-weight: 500; font-size: 17px; line-height: 1.05; text-transform: uppercase }
+.cars span { font-size: 12.5px; color: var(--dim); line-height: 1.4 }
+
+/* the spreads, in reading order */
+.spreads { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; counter-reset: s; border-top: 1.5px solid var(--ink) }
+.spreads div { padding: 12px 10px 0 0; display: grid; gap: 4px; counter-increment: s; min-width: 0 }
+.spreads div::before { content: counter(s, decimal-leading-zero); font-family: var(--head); font-weight: 300; color: var(--accent) }
+.spreads b { font-family: var(--head); font-weight: 500; text-transform: uppercase; font-size: 16px; line-height: 1.05 }
+.spreads span { font-size: 12.5px; color: var(--dim); line-height: 1.4 }
+
+/* the dark spread: sound, its band running to the screen's edges behind the column */
+.ch.dark { --ink: var(--night-fg); --dim: var(--night-dim); --accent: #c9a2f2; color: var(--ink); background: var(--night); padding-block: 56px;
+  box-shadow: 0 0 0 100vmax var(--night); clip-path: inset(0 -100vmax) }
+.ch.dark figcaption b { color: var(--night-fg) }
+.formula { font-family: var(--thin); font-size: clamp(20px, 2.4vw, 30px); letter-spacing: .04em; padding: 18px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line) }
+.ch.dark { --line: rgba(236, 231, 241, .16) }
+.formula em { font-family: var(--serif); font-size: 1.15em; color: var(--accent) }
+.engines { width: 100%; border-collapse: collapse; font-size: 14px }
+.engines th, .engines td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid rgba(236, 231, 241, .14); vertical-align: top }
+.engines th { font-family: var(--thin); font-weight: 500; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--night-dim) }
+.engines td:nth-child(2) { font-family: var(--head); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap }
+.engines td:nth-child(3) { font-variant-numeric: tabular-nums; white-space: nowrap }
+.table { overflow-x: auto }
+.specs { display: grid; gap: 14px }
+.specs figure img { border-color: rgba(236, 231, 241, .14) }
+
+/* what broke */
+.log { display: grid; border-top: 1.5px solid var(--ink) }
+.log div { display: grid; grid-template-columns: minmax(0, 15ch) minmax(0, 1fr); gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--line) }
+.log b { font-family: var(--head); font-weight: 500; font-size: 19px; line-height: 1.1; text-transform: uppercase }
+.log p { font-size: 15px }
+
+/* numbers */
+.nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1.5px solid var(--ink) }
+.nums div { padding: 16px 12px 16px 0; border-bottom: 1px solid var(--line); display: grid; gap: 2px }
+.nums b { font-family: var(--head); font-weight: 300; font-size: clamp(42px, 5vw, 64px); line-height: 1; font-variant-numeric: tabular-nums; color: var(--accent) }
+.nums span { font-size: 13px; color: var(--dim) }
+
+.end { padding-block: 64px 72px; display: grid; gap: 28px; border-top: 1.5px solid var(--ink) }
+.go { display: flex; flex-wrap: wrap; gap: 12px }
+.go a { display: inline-flex; gap: 10px; align-items: center; padding: 14px 20px; border: 1.5px solid var(--ink); text-decoration: none; font-family: var(--thin); font-weight: 500; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; transition: background-color .2s, color .2s }
+.go a:hover { background: var(--ink); color: var(--paper) }
+.credits { display: grid; gap: 6px; font-size: 13.5px; color: var(--dim); max-width: 75ch }
+
+@media (max-width: 960px) {
+  .body { grid-template-columns: minmax(0, 1fr); gap: 0 }
+  .index { display: none }
+  .cars { grid-template-columns: repeat(2, minmax(0, 1fr)) } .cars div + div { border-left: 0 } .cars div { border-bottom: 1px solid var(--line) }
+  .spreads { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px }
+  .nums { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+}
+@media (max-width: 620px) {
+  .meta { grid-template-columns: repeat(2, minmax(0, 1fr)) } .meta div:nth-child(3) { padding-left: 0; border-left: 0 }
+  .pair, .phone-pair { grid-template-columns: minmax(0, 1fr) }
+  .log div { grid-template-columns: minmax(0, 1fr); gap: 6px }
+  .spreads { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .chapters { gap: 64px }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important } }
+</style>
+</head>
+<body style="margin:0">
+
+
+<div class="wrap">
+  <header class="mast lab"><b>COACHWORK</b><a href="../" data-out="contents">All issues ↗</a></header>
+
+  <section class="open">
+    <span class="lab" style="color:var(--accent)">Case study · Issue 00 · The making of</span>
+    <h1>Making <span>Coachwork</span></h1>
+    <p class="lede">A car magazine you read by scrolling, where the car stands in front of every word.</p>
+    <div class="meta lab">
+      <div><span>Role</span><b>Design &amp; build</b></div>
+      <div><span>Built with</span><b>three.js · WebGL · Web Audio</b></div>
+      <div><span>Models</span><b>Blender, glTF</b></div>
+      <div><span>Year</span><b>2026</b></div>
+    </div>
+    <figure class="hero">
+      <img src="img/cover-agera.jpg" width="1100" height="690" alt="The cover of issue 02: KOENIGSEGG AGERA in big type, the burgundy car on gold-lipped rims in front of the words, and the ignition dial under the headline.">
+      <figcaption><b>Issue 02, cover</b>The Agera in front of its own headline. The rev counter under the tagline starts the engine.</figcaption>
+    </figure>
+  </section>
+
+  <div class="body">
+    <nav class="index" aria-label="Chapters">
+      <span class="lab">In this issue</span>
+      <a href="#idea"><i>01</i>The idea</a>
+      <a href="#cars"><i>02</i>The cars</a>
+      <a href="#magazine"><i>03</i>A magazine</a>
+      <a href="#front"><i>04</i>In front of the words</a>
+      <a href="#wheels"><i>05</i>Wheels</a>
+      <a href="#light"><i>06</i>Light</a>
+      <a href="#sound"><i>07</i>Sound</a>
+      <a href="#garage"><i>08</i>The garage</a>
+      <a href="#broke"><i>09</i>What broke</a>
+      <a href="#numbers"><i>10</i>By the numbers</a>
+    </nav>
+
+    <div class="chapters">
+      <section class="ch" id="idea">
+        <header><span class="no">01</span><h2>The idea</h2><p class="kick">Big type, one real object in front of it.</p></header>
+        <p>I wanted portfolio pages that feel like holding something. Giant type with one object standing in front of it, and the object is a real 3D model you can turn, not a render pasted onto the page.</p>
+        <p>Cars were the obvious subject. I already had a collection of them from my estate project, each one restyled with its own paint and wheels. They needed a stage that showed them off properly.</p>
+      </section>
+
+      <section class="ch" id="cars">
+        <header><span class="no">02</span><h2>The cars</h2><p class="kick">Five cars, and one rule about colour.</p></header>
+        <p>The rule: no white, grey, silver or black paint. Those look dull on screen. Every car got a rich colour that holds its own against its accents, so there's no brass on a car that already has gold details. I tried a Ferrari 458 first and dropped it. The purple 812 was the Ferrari.</p>
+        <div class="cars">
+          <div style="--sw:#24093f"><i></i><b>Ferrari 812 Superfast</b><span>Viola Notte, gold bolts</span></div>
+          <div style="--sw:#4a0f1c"><i></i><b>Koenigsegg Agera</b><span>Rosso Borgogna, gold lips</span></div>
+          <div style="--sw:#0d1a40"><i></i><b>Bugatti Chiron</b><span>Midnight Blue over black</span></div>
+          <div style="--sw:#7a3a1c"><i></i><b>Koenigsegg One:1</b><span>Liquid Copper over carbon</span></div>
+          <div style="--sw:#2f6d1f"><i></i><b>Mercedes-AMG Project One</b><span>Green Hell, yellow line</span></div>
+        </div>
+      </section>
+
+      <section class="ch" id="magazine">
+        <header><span class="no">03</span><h2>A magazine, not a landing page</h2><p class="kick">Each car gets an issue, and each issue reads like a feature.</p></header>
+        <p>The layouts come from tuning-magazine pages: condensed headlines, thin geometric labels, serif italics for the voice, and light paper spreads alternating with dark studio spreads. Every issue runs the same six spreads, so the car is the only thing that changes.</p>
+        <div class="spreads">
+          <div><b>Cover</b><span>The name, the year, the stance</span></div>
+          <div><b>Build sheet</b><span>The specification, side and front</span></div>
+          <div><b>Design &amp; stance</b><span>Lines, finish, the paint chooser</span></div>
+          <div><b>Signature details</b><span>Wheels, lamps, the close-ups</span></div>
+          <div><b>After dark</b><span>The lights come on</span></div>
+          <div><b>Final impression</b><span>And the next issue</span></div>
+        </div>
+      </section>
+
+      <section class="ch" id="front">
+        <header><span class="no">04</span><h2>In front of the words</h2><p class="kick">The car overlaps its headline like a cover shoot.</p></header>
+        <p>The 3D canvas sits above the text and lets every click pass through it, so the car can stand in front of a headline while the page still works underneath. Each spread holds a camera stop: angle, distance, framing, how much light. Scrolling glides the camera from one stop to the next, and the car holds its pose for a moment at each one, so it never drifts while you read.</p>
+        <p>The opening frame of every spread was checked on a laptop and a phone, because a car that frames well at 16:9 can bury the text at 9:19.</p>
+      </section>
+
+      <section class="ch" id="wheels">
+        <header><span class="no">05</span><h2>Wheels</h2><p class="kick">The hardest part, and the most fun.</p></header>
+        <p>Rims are the highlight of these builds, so any of four forged rims fits on any car, in six finishes. The catch is that every model builds its wheels differently. One car has a mesh per tyre, another one mesh for a whole axle, another carries its tyre lettering as a separate ring.</p>
+        <p>So each car's tyres are measured when it loads. For every wheel the page finds its axle, its true centre, its width, and the inner radius where a rim's bead seats. Parts modelled once for a whole axle get cut into one piece per wheel. A new rim is then scaled to sit exactly on that bead.</p>
+        <figure>
+          <img src="img/rims-five-cars.jpg" width="1600" height="199" loading="lazy" alt="Five front wheels side by side, each car wearing the same Y-spoke forged rim, every rim seated inside its own tyre.">
+          <figcaption><b>Fit check</b>The same Y-spoke rim on all five cars, front left.</figcaption>
+        </figure>
+        <p>The test I trust most: turn every wheel 70 degrees and look again. If a tyre wobbles or a nut drifts away from its spoke, a centre is wrong.</p>
+        <figure>
+          <img src="img/wheel-turn-test.jpg" width="1400" height="438" loading="lazy" alt="The Chiron's front wheel at rest and turned 70 degrees: spokes, EB cap and nuts have all rotated together and the tyre is still centred.">
+          <figcaption><b>Turn test</b>The Chiron at rest and turned 70°. Spokes, cap and nuts move as one.</figcaption>
+        </figure>
+      </section>
+
+      <section class="ch" id="light">
+        <header><span class="no">06</span><h2>Light</h2><p class="kick">Lamps should behave like light, not like stickers.</p></header>
+        <p>The lamps are light sources bright enough to bloom. Tail lamps glow softly at rest and burn when the lights come on, headlamps strike with a short flicker the way LEDs do, and each car's own lamp parts carry the light. The glow had to keep the page behind the car visible, so the bloom keeps the canvas transparent everywhere it isn't lit.</p>
+        <p>An early version added round projector lenses to three of the cars. They sat flat on curved lamps like coins, so they went.</p>
+      </section>
+
+      <section class="ch dark" id="sound" aria-labelledby="sound-h">
+        <header><span class="no">07</span><h2 id="sound-h">Sound</h2><p class="kick">No recordings. Each engine is built from how it's made.</p></header>
+        <p>The first versions all sounded alike, so I rebuilt them from the engines themselves. A four-stroke fires each cylinder once every two turns, so the note follows the revs and the cylinder count:</p>
+        <p class="formula">firing frequency = <em>rpm</em> × <em>cylinders</em> ÷ 120</p>
+        <p>On top of that note: each engine's own harmonics, the beat between cylinder banks (a V8's lope, a W16's rumble), rasp, the resonance of its exhaust, a rev limiter, and for the turbo cars a whistle, rushing air, and a flutter or a whoosh when you lift off. The Project One adds its electric whine. Each car also got a named exhaust of its own.</p>
+        <div class="table">
+          <table class="engines">
+            <thead><tr><th>Car</th><th>Exhaust</th><th>At the redline</th><th>Character</th></tr></thead>
+            <tbody>
+              <tr><td>Ferrari 812 Superfast</td><td>Canto</td><td>V12 · 8,900 rpm · 890 Hz</td><td>A clean shriek to the limiter</td></tr>
+              <tr><td>Koenigsegg Agera</td><td>Ghost</td><td>V8 · 7,250 rpm · 483 Hz</td><td>Flat-plane rasp, wastegates chatter on lift</td></tr>
+              <tr><td>Bugatti Chiron</td><td>Molsheim</td><td>W16 · 6,700 rpm · 893 Hz</td><td>Deep and layered, four turbos rushing</td></tr>
+              <tr><td>Koenigsegg One:1</td><td>Megawatt</td><td>V8 · 8,250 rpm · 550 Hz</td><td>The angriest, the loudest crackle</td></tr>
+              <tr><td>Mercedes-AMG Project One</td><td>Brixworth</td><td>V6 · 11,000 rpm · 550 Hz</td><td>Formula One buzz under an electric whine</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="specs">
+          <figure><img src="img/spec-f812.jpg" width="1000" height="220" loading="lazy" alt="Spectrogram of the 812's sound: start, idle, a rev to the limiter, the lift-off and a blip; dense, evenly spaced harmonics."><figcaption><b>812 · Canto</b>Start, idle, a full rev into the limiter, the lift-off, a blip. Time runs left to right, pitch bottom to top.</figcaption></figure>
+          <figure><img src="img/spec-agera.jpg" width="1000" height="220" loading="lazy" alt="Spectrogram of the Agera's sound, with a broad band of turbo air during the rev."><figcaption><b>Agera · Ghost</b>The broad band during the rev is turbo air.</figcaption></figure>
+          <figure><img src="img/spec-chiron.jpg" width="1000" height="220" loading="lazy" alt="Spectrogram of the Chiron's sound, its harmonics packed low and dense."><figcaption><b>Chiron · Molsheim</b>Packed low and dense: sixteen cylinders in two banks.</figcaption></figure>
+          <figure><img src="img/spec-one1.jpg" width="1000" height="220" loading="lazy" alt="Spectrogram of the One:1's sound, brightest of the five, with a heavy low band of rasp."><figcaption><b>One:1 · Megawatt</b>The brightest of the five, with the heaviest rasp.</figcaption></figure>
+          <figure><img src="img/spec-projectone.jpg" width="1000" height="220" loading="lazy" alt="Spectrogram of the Project One's sound, its harmonics climbing highest."><figcaption><b>Project One · Brixworth</b>The harmonics climb highest: 11,000 rpm.</figcaption></figure>
+        </div>
+      </section>
+
+      <section class="ch" id="garage">
+        <header><span class="no">08</span><h2>The garage</h2><p class="kick">All five cars on one page, to play with.</p></header>
+        <p>The garage loads one car at a time. Each one stands in front of its name in brushed metal, with outline echoes stepping back into the dark that slide against each other as the view turns.</p>
+        <figure>
+          <img src="img/garage-chiron.jpg" width="1100" height="700" loading="lazy" alt="The garage library: the Bugatti Chiron in front of its name in chrome-blue metal letters, the car list on the left, views on the right, the ignition under the car and the rim library along the bottom.">
+          <figcaption><b>Garage library</b>The Chiron in front of its name, the ignition under it.</figcaption>
+        </figure>
+        <p>Changing rims is a small show. A portal opens on the floor, the car rises on its jacks with its wheels hanging, the rims change in a flash, and it drops back onto its springs and settles. The body rides on springs over the wheels everywhere. It rocks when the engine catches and squats when it pulls.</p>
+        <figure>
+          <img src="img/portal-neon.jpg" width="1100" height="700" loading="lazy" alt="An earlier garage: the Agera lifted mid rim change inside a glowing red portal on the floor, its name in red neon behind it.">
+          <figcaption><b>First version</b>Mid rim change, with the name in neon. The neon pulled the eye off the car, so it became metal.</figcaption>
+        </figure>
+        <p>Drive puts the car on a rolling road inside the portal. Tap for gas, shift with the paddles, and hold the brake. There are seven gears worked out from each car's redline and top speed. An upshift cuts the power for a moment, so the car jerks and then surges as it bites. A downshift blips, and it's refused if it would over-rev. The asphalt streaks past, the wheels blur, leaves blow round the car and curl into its wake, and hard braking from speed makes the discs glow.</p>
+        <div class="phone-pair">
+          <figure>
+            <img src="img/drive-agera.jpg" width="1100" height="700" loading="lazy" alt="Drive mode: the Agera at 131 km/h in third gear on dark asphalt with a white lane line inside the portal ring, wheels blurred, leaves in the air.">
+            <figcaption><b>Drive</b>Third gear, 131 km/h.</figcaption>
+          </figure>
+          <figure>
+            <img src="img/drive-phone.jpg" width="390" height="844" loading="lazy" alt="The same drive mode on a phone: the car under its name, the dial with paddles and pedals, the rims below.">
+            <figcaption><b>Phone</b>Paddles and pedals fit either side of the dial.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="ch" id="broke">
+        <header><span class="no">09</span><h2>What broke</h2><p class="kick">Every fix taught me something about the models.</p></header>
+        <div class="log">
+          <div><b>The floating Chiron</b><p>It stood 13 cm above the floor. Its parts are rotated inside the file, and a rotated part's bounding box comes out far bigger than the part. The page now measures the real vertices.</p></div>
+          <div><b>Black squares</b><p>A very bright reflection overflowed the frame buffer, and the bloom spread the bad pixels into blocks. The values are now cleaned and capped before the bloom.</p></div>
+          <div><b>Rims coming off</b><p>The 812 keeps its tyre lettering as a separate ring, so it looked like a car with eight wheels. Parts are now pooled per wheel before anything is measured.</p></div>
+          <div><b>A tyre that seemed to melt</b><p>The Agera's wheel centre came from the average of its vertices, 2 cm off, so the wheel turned off-centre. The centre now comes from the tyre's outline.</p></div>
+          <div><b>Rims that stood still</b><p>The Chiron's rims and nuts were modelled once per axle and stayed put while the tyres turned. They're now cut per wheel.</p></div>
+          <div><b>A green close-up</b><p>The portal's light curtain wrapped round the camera in a wheel close-up and tinted the whole screen. It now hides when the camera is that close.</p></div>
+          <div><b>Nothing loaded</b><p>On the live site every issue waited forever for a car file that wasn't there. The files went in, and a missing car now says so.</p></div>
+        </div>
+      </section>
+
+      <section class="ch" id="numbers">
+        <header><span class="no">10</span><h2>By the numbers</h2></header>
+        <div class="nums">
+          <div><b>5</b><span>cars, one issue each</span></div>
+          <div><b>6</b><span>spreads per issue</span></div>
+          <div><b>4</b><span>forged rims, any car</span></div>
+          <div><b>6</b><span>rim finishes</span></div>
+          <div><b>7</b><span>gears in drive mode</span></div>
+          <div><b>5</b><span>named exhausts</span></div>
+          <div><b>0</b><span>sound recordings</span></div>
+          <div><b>16</b><span>MB for all five cars</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="end">
+    <div class="go">
+      <a href="../" data-out="contents">Read the issues ↗</a>
+      <a href="../garage/" data-out="garage">Open the garage ↗</a>
+    </div>
+    <div class="credits">
+      <span>Bugatti Chiron model by Bob Kimani (Kimz Auto). The other cars are third-party models by their original modellers, restyled for Coachwork: paint, liveries, lamps and wheels. The forged rims are my own, modelled in code.</span>
+      <span>Set in Oswald, Jost, Cormorant Garamond and Poppins. Rendered live with three.js.</span>
+      <span>Car names and marks belong to their makers. A portfolio piece, not affiliated with them.</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+// the index follows the chapter you're reading
+(() => {
+  const links = [...document.querySelectorAll('.index a')];
+  const chapters = links.map((a) => document.querySelector(a.getAttribute('href')));
+  if (!('IntersectionObserver' in window)) return;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) links.forEach((a, i) => a.classList.toggle('on', chapters[i] === e.target));
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  chapters.forEach((c) => c && io.observe(c));
+})();
+</script>
+
+</body>
+</html>

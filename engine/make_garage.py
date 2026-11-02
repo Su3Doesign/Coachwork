@@ -18,7 +18,7 @@ for style in ('y5', 's10', 'aero', 'mesh'):
 for f in ('draco_decoder.wasm', 'draco_wasm_wrapper.js', 'draco_decoder.js'):
     shutil.copy(MM.DRACO / f, d / 'draco' / f)
 html = (HERE / 'src' / 'garage.html').read_text()
-for k, v in {'IMPORTMAP': MM.IMPORTMAP, 'STAGE': (HERE / 'src' / 'scrollstage.js').read_text(), 'CARKIT': (HERE / 'src' / 'carkit.js').read_text(), 'CARS': json.dumps(cars)}.items():
+for k, v in {'CONTENTS': json.loads((HERE / 'links.json').read_text()).get('contents', '#'), 'IMPORTMAP': MM.IMPORTMAP, 'STAGE': (HERE / 'src' / 'scrollstage.js').read_text(), 'CARKIT': (HERE / 'src' / 'carkit.js').read_text(), 'CARS': json.dumps(cars)}.items():
     html = html.replace('%%' + k + '%%', v)
 (d / 'index.html').write_text(html)
 (d / 'preview.html').write_text('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body style="margin:0">' + html + '</body></html>')
