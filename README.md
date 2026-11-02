@@ -2,13 +2,29 @@
 
 A car magazine you read by scrolling. Five issues, one car each, in 3D: the car sits in front of the words and moves
 from spread to spread (cover, build sheet, design & stance, signature details, after dark, final impression). A garage
-library holds all five cars in one page, each in front of its name painted on the wall, with forged rims to fit on any of them.
+library holds all five cars in one page, each in front of its name in layered metal type, with forged rims to fit on any of them.
 
 Every page has an ignition: a start button inside a rev counter (on each issue's cover, in its top bar and in its After
 Dark spread; centre stage in the garage). Press it and the needle sweeps, the
 starter turns and the engine catches; hold it to rev (the body rocks on its springs, the exhaust crackles when you lift
 off), tap it again to stop. The lights switch beside it wakes the headlamps. Changing rims opens a portal on the floor:
 the car rises on its jacks with its wheels hanging, the rims change in a flash, and it drops back and settles.
+
+Each car has its own engine note, built from its real layout (cylinders, redline, crank, turbos) and its own exhaust:
+
+| Car | Exhaust | Sound |
+| --- | --- | --- |
+| Ferrari 812 Superfast | Canto | naturally aspirated V12, valved to sing to 8,900 rpm |
+| Koenigsegg Agera | Ghost | twin-turbo flat-plane V8, wastegates that chatter on every lift |
+| Bugatti Chiron | Molsheim | four turbos into one deep W16, a rush of air on every lift |
+| Koenigsegg One:1 | Megawatt | titanium with a 3D-printed tip, the flat-plane V8 at its angriest to 8,250 rpm |
+| Mercedes-AMG Project One | Brixworth | a Formula One V6 to 11,000 rpm under the electric whine |
+
+In the garage, Drive puts the car on a rolling road inside the portal: tap the start button for gas (tap again to lift),
+shift with the paddles either side of the rev counter (or the arrow keys, Q and E; the space bar is the throttle).
+Seven gears from each car's redline and top speed; an upshift cuts the power for a moment and the car jerks and surges
+as it bites again; a downshift blips and crackles, and is refused if it would over-rev. The wheels blur, the road
+streaks past and leaves blow round the car and swirl in its wake.
 
 | Page | Folder |
 | --- | --- |

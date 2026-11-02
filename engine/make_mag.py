@@ -57,7 +57,9 @@ ISSUES = {
         paints=[{'name': 'Viola Notte', 'color': '#24093f', 'caliper': '#0b0b0c'}, {'name': 'Rosso Bordeaux', 'color': '#3c0710', 'caliper': '#0b0b0c'},
                 {'name': 'Blu Notte', 'color': '#0b1a45', 'caliper': '#0b0b0c'}, {'name': 'Verde Abetone', 'color': '#0b2b1d', 'caliper': '#0b0b0c'}],
         rim_factory='Gloss black', bolts=True,
-        engine={'idle': 42, 'range': 170},
+        engine={'name': 'Canto', 'note': 'naturally aspirated V12, valved to sing to 8,900 rpm', 'cyl': 12, 'idle': 1000, 'redline': 8900, 'top': 340, 'z100': 2.9,
+                'harm': [1, .75, .6, .52, .45, .4, .34, .3, .26, .22, .2, .17, .15, .13, .11, .1, .09, .08], 'sub': .04, 'sub4': 0, 'rasp': .1,
+                'body': 1300, 'bright': 9500, 'drive': 1.6, 'ring': [2600, 2.5, 5], 'turbo': 0, 'lift': None, 'whine': 0, 'pops': .45, 'vol': 1},
     ),
     'agera': dict(
         no='02', model='agera', make='Koenigsegg', name='Agera', year='2011', short='Agera',
@@ -80,7 +82,9 @@ ISSUES = {
         paints=[{'name': 'Rosso Borgogna', 'color': '#3c0712'}, {'name': 'Blu Notte', 'color': '#0b1a45'},
                 {'name': 'Viola', 'color': '#2a0c46'}, {'name': 'Verde Inglese', 'color': '#0b2b1d'}],
         rim_factory='Black with gold lips', bolts=False,
-        engine={'idle': 46, 'range': 190, 'mix': [[1, 'sawtooth', .5], [2, 'sawtooth', .25], [.5, 'square', .35]]},
+        engine={'name': 'Ghost', 'note': 'twin-turbo flat-plane V8, wastegates that chatter on every lift', 'cyl': 8, 'idle': 950, 'redline': 7250, 'top': 390, 'z100': 3.1,
+                'harm': [1, .95, .5, .5, .3, .28, .18, .16, .1, .09, .06], 'sub': .14, 'sub4': .03, 'rasp': .32,
+                'body': 850, 'bright': 6200, 'drive': 2.3, 'ring': [1400, 2, 4], 'turbo': .9, 'lift': 'flutter', 'whine': 0, 'pops': .8, 'vol': 1},
     ),
     'chiron': dict(
         no='03', model='chiron', make='Bugatti', name='Chiron', year='2016', short='Chiron',
@@ -103,7 +107,9 @@ ISSUES = {
         paints=[{'name': 'Midnight Blue', 'color': '#0a1838'}, {'name': 'Bordeaux', 'color': '#3c0712'},
                 {'name': 'Violet', 'color': '#24093f'}, {'name': 'Racing Green', 'color': '#0b2b1d'}],
         rim_factory='Black, graphite lips', bolts=False,
-        engine={'idle': 34, 'range': 130, 'mix': [[1, 'sawtooth', .5], [1.25, 'sawtooth', .4], [.5, 'square', .3], [2, 'sawtooth', .15]]},
+        engine={'name': 'Molsheim', 'note': 'four turbos into one deep W16, a rush of air on every lift', 'cyl': 16, 'idle': 900, 'redline': 6700, 'top': 420, 'z100': 2.4,
+                'harm': [1, .5, .45, .3, .25, .16, .13, .09, .07, .05], 'sub': .4, 'sub4': .25, 'rasp': .12,
+                'body': 520, 'bright': 3000, 'drive': 1.5, 'ring': [160, 1.2, 6], 'turbo': 1, 'lift': 'whoosh', 'whine': 0, 'pops': .12, 'vol': 1.15},
     ),
     'one1': dict(
         no='04', model='one1', make='Koenigsegg', name='One:1', year='2014', short='One:1',
@@ -126,7 +132,9 @@ ISSUES = {
         paints=[{'name': 'Liquid Copper', 'color': '#7a3214'}, {'name': 'Bordeaux', 'color': '#3c0712'},
                 {'name': 'Midnight Blue', 'color': '#0b1a45'}, {'name': 'Violet', 'color': '#2a0c46'}],
         rim_factory='Gloss carbon black', bolts=False, wheel='y5', finish=1,
-        engine={'idle': 48, 'range': 200, 'mix': [[1, 'sawtooth', .5], [2, 'sawtooth', .25], [.5, 'square', .35]]},
+        engine={'name': 'Megawatt', 'note': 'titanium with a 3D-printed tip, the flat-plane V8 at its angriest to 8,250 rpm', 'cyl': 8, 'idle': 1000, 'redline': 8250, 'top': 440, 'z100': 2.8,
+                'harm': [1, 1, .62, .58, .42, .38, .26, .24, .16, .14, .1, .09], 'sub': .1, 'sub4': .02, 'rasp': .42,
+                'body': 1100, 'bright': 8500, 'drive': 2.8, 'ring': [2100, 5, 7], 'turbo': .75, 'lift': 'flutter', 'whine': 0, 'pops': 1, 'vol': 1.05},
     ),
     'projectone': dict(
         no='05', model='projectone', make='Mercedes-AMG', name='Project One', year='2017', short='Project One',
@@ -151,7 +159,9 @@ ISSUES = {
         livery={'color': '#f0c419', 'sweep': [0.92, -0.98, 0.42, 0.6, 0.024], 'pin': [0.14, 0.012], 'carbonBelow': 0.14,
                 'decal': {'src': 'amg_side.png', 'at': [0.02, 0.3], 'size': [0.62, 0.08], 'color': '#0d0d0e'}},
         decal_file='livery_real/amg_side.png',
-        engine={'idle': 60, 'range': 260, 'mix': [[1, 'sawtooth', .45], [2, 'square', .2], [3, 'sawtooth', .15]]},
+        engine={'name': 'Brixworth', 'note': 'a Formula One V6 to 11,000 rpm under the electric whine', 'cyl': 6, 'idle': 1300, 'redline': 11000, 'top': 352, 'z100': 2.9,
+                'harm': [1, .45, .7, .3, .45, .2, .3, .12, .18, .08, .12, .06], 'sub': .05, 'sub4': 0, 'rasp': .15,
+                'body': 1500, 'bright': 9000, 'drive': 1.9, 'ring': [3200, 4, 4], 'turbo': .45, 'lift': 'flutter', 'whine': .7, 'pops': .25, 'vol': .95},
     ),
 }
 ORDER = ['f812', 'agera', 'chiron', 'one1', 'projectone']
@@ -195,7 +205,8 @@ def page(key, links):
     nxt = ORDER[(ORDER.index(key) + 1) % len(ORDER)]
     nc = ISSUES[nxt]
     title = f"{c['make']} {c['name']}"
-    spec_rows = ''.join(f'<div class="row"><span>{e(a)}</span><b>{e(b)}</b></div>' for a, b in c['specs'])
+    specs = c['specs'] + [('Exhaust', f"Coachwork {c['engine']['name']}: {c['engine']['note']}")]
+    spec_rows = ''.join(f'<div class="row"><span>{e(a)}</span><b>{e(b)}</b></div>' for a, b in specs)
     design = ''.join(f'<p class="rv"><b>{e(t)}</b> {e(x)}</p>' for t, x in c['design'])
     keys = ['tail', 'wheel', 'exhaust', 'topr']
     sides = {'tail': 'left', 'wheel': 'left', 'exhaust': 'right', 'topr': 'left'}

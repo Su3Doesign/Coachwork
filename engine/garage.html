@@ -2,7 +2,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300..700&family=Jost:wght@300;400;500&family=Cormorant+Garamond:ital,wght@1,500&display=swap">
 <style>
-/* Layout: a night garage as a tool. The car stands on a polished floor in front of its own name painted on the wall;
+/* Layout: a night garage as a tool. The car stands on a polished floor in front of its own name, set in metal with
+   outline echoes stepping back into the dark;
    the left rail picks the car (each loads only when chosen), the bottom rail is the rim library, the right rail the views,
    and the ignition (start button in a rev counter, lights and sound beside it) sits centre stage under the car. */
 :root {
@@ -30,6 +31,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .mast b { font-family: var(--head); font-weight: 600; font-size: 22px; letter-spacing: .06em }
 .mast span { font-family: var(--serif); font-style: italic; font-size: 19px; color: var(--dim) }
 #ign { grid-column: 2; grid-row: 2; align-self: end; justify-self: center; margin-bottom: 4px; --d: 128px; --side: 46px; gap: 14px }
+#ign.driving { gap: 58px }
 .rims .spec { min-height: 4.1em }
 .panel { background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0 }
 .cars { grid-column: 1; grid-row: 2; align-self: start }
@@ -61,7 +63,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .loader.off { opacity: 0 }
 @media (max-width: 900px) {
   .ui { grid-template-columns: 1fr auto; grid-template-rows: auto auto 1fr auto auto; gap: 8px }
-  .mast { grid-column: 1 / 3 } #ign { grid-column: 1 / 3; grid-row: 3; --d: 96px; --side: 40px; gap: 12px; margin-bottom: 0 }
+  .mast { grid-column: 1 / 3 } #ign { grid-column: 1 / 3; grid-row: 3; --d: 92px; --side: 36px; gap: 10px; margin-bottom: 0 }
+  #ign.driving { gap: 44px } #ign .ign-pad { width: 26px; height: 44px; margin-top: -22px; font-size: 19px } #ign .ign-dn { left: -36px } #ign .ign-up { right: -36px }
   .mast b { font-size: 18px }
   .cars { grid-column: 1 / 3; grid-row: 2; display: flex; overflow-x: auto; padding: 8px; gap: 4px } .cars .lab { display: none }
   .car { flex: 0 0 auto; grid-template-columns: auto auto; padding: 6px 10px 6px 8px } .car i { display: none } .car b { font-size: 14px }
@@ -136,7 +139,7 @@ controls.enableDamping = true; controls.dampingFactor = 0.07; controls.minDistan
 controls.maxPolarAngle = Math.PI * 0.495; controls.enablePan = false; controls.autoRotateSpeed = 0.6;
 
 // a photo studio cyclorama: a curved wall that runs into the floor with no edge, a soft pool of light under the car,
-// and the car's name in the paint of the far wall (seen from the front only)
+// and the car's name standing behind it
 const grad = (stops, w, h, radial) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
   const gr = radial ? g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2) : g.createLinearGradient(0, h, 0, 0);
   stops.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, w, h);
@@ -149,17 +152,62 @@ const floor = new THREE.Mesh(new THREE.CircleGeometry(4.2, 128), new THREE.MeshS
 floor.rotation.x = -Math.PI / 2; scene.add(floor);
 scene.background = new THREE.Color(0x070708); scene.fog = null;
 
-// the car's name painted on the far wall in its colour, where the opening view looks past the car, so it reads behind it
-const WALL = { w: 3.3, h: 0.825, y: 0.345, at: new THREE.Vector3(-0.95, 0, 1.2).normalize().multiplyScalar(3.6) };
-const wallC = document.createElement('canvas'); wallC.width = 2048; wallC.height = 512;
-const wallTex = new THREE.CanvasTexture(wallC); wallTex.colorSpace = THREE.SRGBColorSpace; wallTex.anisotropy = 8;
-const wall = new THREE.Mesh(new THREE.PlaneGeometry(WALL.w, WALL.h), new THREE.MeshBasicMaterial({ map: wallTex, transparent: true, depthWrite: false, toneMapped: false }));
-wall.position.set(WALL.at.x, WALL.y, WALL.at.z); wall.rotation.y = Math.atan2(-WALL.at.x, -WALL.at.z); scene.add(wall);
+// The car's name behind it, as an installation: a solid face in a brushed-metal gradient of the car's colour with a band
+// of light crossing it now and then, and outline echoes stepping back into the dark that slide against each other as
+// the view turns. Each car's name arrives from the depth, echo after echo. It stands where the opening view looks past
+// the car, so the name reads behind it.
+const NAME = { w: 3.0, h: 0.75, y: 0.32, dir: new THREE.Vector3(-0.95, 0, 1.2).normalize(), d: 3.3, echoes: 7, step: 0.07 };
+const nameYaw = Math.atan2(-NAME.dir.x, -NAME.dir.z);
+const mkCanvas = () => { const c = document.createElement('canvas'); c.width = 2048; c.height = 512; const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return [c, tx]; };
+const [faceC, faceTex] = mkCanvas(), [edgeC, edgeTex] = mkCanvas();
+const faceMat = new THREE.ShaderMaterial({ uniforms: { map: { value: faceTex }, uT: { value: 0 }, uIn: { value: 1 } }, transparent: true, depthWrite: false,
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D map; uniform float uT, uIn; varying vec2 vUv;
+void main() {
+  vec4 c = texture2D(map, vUv);
+  float x = vUv.x + (vUv.y - 0.5) * 0.22, s = fract(uT * 0.085) * 2.2 - 0.6, band = exp(-pow((x - s) / 0.03, 2.0));
+  gl_FragColor = vec4(min(c.rgb + band * 0.42 * c.a, vec3(0.97)), c.a * uIn);
+  #include <colorspace_fragment>
+}` });
+const nameGroup = new THREE.Group(); scene.add(nameGroup);
+const face = new THREE.Mesh(new THREE.PlaneGeometry(NAME.w, NAME.h), faceMat); face.renderOrder = 2; nameGroup.add(face);
+const echoes = [...Array(NAME.echoes)].map((_, i) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(NAME.w, NAME.h), new THREE.MeshBasicMaterial({ map: edgeTex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0 }));
+  m.renderOrder = 1 - i * 0.01; nameGroup.add(m); return m;
+});
+for (const m of [face, ...echoes]) m.rotation.y = nameYaw;
+let nameT = 9;
 function paintWall(name, color) {
-  const g = wallC.getContext('2d'); g.clearRect(0, 0, 2048, 512);
-  g.font = '600 400px Oswald, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = color; g.globalAlpha = 0.55; g.fillText(name.toUpperCase(), 1024, 280, 1960);
-  wallTex.needsUpdate = true;
+  const txt = name.toUpperCase(), base = new THREE.Color(color);
+  const hex = (c) => '#' + c.getHexString(), light = hex(base.clone().lerp(new THREE.Color('#ffffff'), 0.62)), dark = hex(base.clone().multiplyScalar(0.38)), mid = hex(base);
+  for (const [c, tx, faceSide] of [[faceC, faceTex, true], [edgeC, edgeTex, false]]) {
+    const g = c.getContext('2d'); g.clearRect(0, 0, 2048, 512); g.save();
+    g.font = '600 380px Oswald, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+    const k = Math.min(1, 1880 / g.measureText(txt).width); g.translate(1024, 276); g.scale(k, k);
+    if (faceSide) {                                        // brushed metal: light above a hard horizon, the colour below it
+      const gr = g.createLinearGradient(0, -150, 0, 150);
+      gr.addColorStop(0, light); gr.addColorStop(0.46, mid); gr.addColorStop(0.5, dark); gr.addColorStop(0.78, mid); gr.addColorStop(1, light);
+      g.fillStyle = gr; g.fillText(txt, 0, 0);
+      g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.08;
+      for (let y = -180; y < 180; y += 3) { g.fillStyle = y % 6 ? '#ffffff' : '#000000'; g.fillRect(-1100, y, 2200, 1); }   // the brushing
+      g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+      g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.55)'; g.strokeText(txt, 0, 0);
+    } else { g.lineWidth = 5; g.strokeStyle = light; g.strokeText(txt, 0, 0); }
+    g.restore(); tx.needsUpdate = true;
+  }
+  nameT = window.__stageSnap ? 9 : 0;
+}
+function runName(dt, time) {
+  nameT += dt; faceMat.uniforms.uT.value = time;
+  const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  const breathe = 1 + 0.12 * Math.sin(time * 0.6);
+  faceMat.uniforms.uIn.value = ease((nameT - 0.35) / 0.6);
+  face.position.copy(NAME.dir).multiplyScalar(NAME.d + (1 - ease((nameT - 0.35) / 0.6)) * 0.4).setY(NAME.y);
+  echoes.forEach((m, i) => {
+    const p = ease((nameT - i * 0.07) / 0.7), depth = NAME.d + (i + 1) * NAME.step * breathe + (1 - p) * 0.9;
+    m.position.copy(NAME.dir).multiplyScalar(depth).setY(NAME.y);
+    m.material.opacity = 0.42 * Math.pow(1 - i / NAME.echoes, 1.4) * p;
+  });
 }
 
 /* ---------- loading a car (one at a time; the last one is freed) ---------- */
@@ -271,17 +319,18 @@ FINISHES.forEach((f, i) => {
 });
 
 /* ---------- the ignition: built once, it drives whichever car is on the floor ---------- */
-carKit.ignition(document.getElementById('ign'), () => kit);
+carKit.ignition(document.getElementById('ign'), () => kit, { drive: true });
 
 /* ---------- loop ---------- */
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false); fx.composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight;
-  camera.fov = camera.aspect < 0.8 ? 46 : camera.aspect < 1.2 ? 38 : 32;
+  camera.fov = baseFov = camera.aspect < 0.8 ? 46 : camera.aspect < 1.2 ? 38 : 32;
   // the car sits above the middle of the screen, clear of the ignition and the panels under it
-  const dy = innerHeight * (innerWidth > 900 ? 0.1 : 0.045);
-  camera.setViewOffset(innerWidth, innerHeight, 0, dy, innerWidth, innerHeight); camera.updateProjectionMatrix();
+  viewDy = innerHeight * (innerWidth > 900 ? 0.1 : 0.045);
+  camera.setViewOffset(innerWidth, innerHeight, 0, viewDy, innerWidth, innerHeight); camera.updateProjectionMatrix();
   if (carCtx && !fly) setView(view, true);
 }
+let baseFov = 32, viewDy = 0;
 addEventListener('resize', resize); resize();
 camera.position.set(0.95, 0.3, -1.2); controls.target.set(0, 0.1, 0);
 const clock = new THREE.Clock();
@@ -296,6 +345,13 @@ controls.addEventListener('start', () => { fly = null; });
   }
   controls.update();
   kit?.frame({ lights: 0, env: 1, spin: 0 }, dt);
+  runName(dt, clock.elapsedTime);
+  // speed: the lens widens a little, the camera trembles with the road and kicks on each shift
+  const v = kit?.speed?.() || 0, kick = kit?.shiftKick?.() || 0, amp = Math.min(2.2, v / 140) + kick * 2.5;
+  const fov = baseFov + Math.min(7, v * 0.022);
+  if (amp > 0.01 || Math.abs(camera.fov - fov) > 0.01) {
+    camera.fov = fov; camera.setViewOffset(innerWidth, innerHeight, (Math.random() - 0.5) * amp, viewDy + (Math.random() - 0.5) * amp, innerWidth, innerHeight); camera.updateProjectionMatrix();
+  }
   fx.composer.render(dt);
 })();
 
