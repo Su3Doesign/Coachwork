@@ -187,7 +187,8 @@ function scrollStage(o) {
   ctx.ready = new Promise((resolve, reject) => {
     const fail = (e) => { console.error(e); document.documentElement.classList.add('stage-error'); reject(e); };
     const done = (g) => { try { onModel(g); resolve(ctx); } catch (e) { fail(e); } };
-    const prog = (e) => { if (e.total) opt.onProgress?.(e.loaded / e.total); };
+    // capped: a server that compresses the file reports its smaller size as the total
+    const prog = (e) => { if (e.total) opt.onProgress?.(Math.min(1, e.loaded / e.total)); };
     if (/\.txt$/.test(opt.url)) {
       new THREE.FileLoader().setResponseType('text').load(opt.url, (txt) => {
         const bin = atob(txt.trim()); const buf = new Uint8Array(bin.length);
@@ -1191,7 +1192,7 @@ const loader = document.getElementById('loader'), loadTxt = document.getElementB
 let current = null, kit = null, carCtx = null, rimTpl = {}, choice = { rim: 'y5', fin: 0 };
 const MODEL_EXT = 'glb';   // 'glb' in the repository copies
 const ISSUE_DIR = {"f812": "01-ferrari-812-superfast", "agera": "02-koenigsegg-agera", "chiron": "03-bugatti-chiron", "one1": "04-koenigsegg-one1", "projectone": "05-mercedes-amg-project-one"};   // each car's model lives in its issue's folder
-function b64(url, onP) { url = url.replace(/\.txt$/, '.' + MODEL_EXT); if (MODEL_EXT === 'glb') return new Promise((res, rej) => new THREE.FileLoader().setResponseType('arraybuffer').load(url, res, (e) => e.total && onP?.(e.loaded / e.total), rej)); return new Promise((res, rej) => new THREE.FileLoader().setResponseType('text').load(url, (t) => { const bin = atob(t.trim()); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); res(u.buffer); }, (e) => e.total && onP?.(e.loaded / e.total), rej)); }
+function b64(url, onP) { url = url.replace(/\.txt$/, '.' + MODEL_EXT); if (MODEL_EXT === 'glb') return new Promise((res, rej) => new THREE.FileLoader().setResponseType('arraybuffer').load(url, res, (e) => e.total && onP?.(Math.min(1, e.loaded / e.total)), rej)); return new Promise((res, rej) => new THREE.FileLoader().setResponseType('text').load(url, (t) => { const bin = atob(t.trim()); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); res(u.buffer); }, (e) => e.total && onP?.(Math.min(1, e.loaded / e.total)), rej)); }
 const parse = (buf) => new Promise((res, rej) => gl.parse(buf, '', res, rej));
 function free(obj) { obj.traverse((o) => { o.geometry?.dispose(); const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach((m) => { if (!m) return; for (const k in m) if (m[k]?.isTexture) m[k].dispose(); m.dispose(); }); }); }
 
