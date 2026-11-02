@@ -10,7 +10,7 @@ cars = []
 for k in MM.ORDER:
     c = MM.ISSUES[k]
     cars.append({'key': k, 'no': c['no'], 'make': c['make'], 'name': c['name'], 'accent': c['accent'], 'paint': c['paints'][0]['name'], 'exhaust': c['engine']['name'],
-                 'cfg': {'paints': c['paints'], 'matte': c.get('matte', False), 'livery': c.get('livery'), 'engine': c.get('engine'), 'accent': c['accent']}})
+                 'cfg': {'paints': c['paints'], 'matte': c.get('matte', False), 'livery': c.get('livery'), 'engine': c.get('engine'), 'accent': c['accent'], 'glass': c.get('glass')}})
     (d / f'model-{k}.txt').write_text(base64.b64encode((MM.CARS / f"{c['model']}.glb").read_bytes()).decode())
     if c.get('decal_file'): shutil.copy(MM.DECALS / c['decal_file'], d / Path(c['decal_file']).name)
 for style in ('y5', 's10', 'aero', 'mesh'):

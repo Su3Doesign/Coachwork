@@ -462,6 +462,9 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
   };
   M.carbon.onBeforeCompile = (s) => archPatch(s, false);
   const rims = [], bolts = [], calipers = [], lampsF = [], lampsT = [];
+  for (const m of [...meshes]) {
+    if (/^Projector_/.test(m.name) || /^Projector_/.test(m.parent?.name || '')) { m.visible = false; m.parent?.remove(m); meshes.splice(meshes.indexOf(m), 1); }
+  }
   for (const m of meshes) {
     const n = matName(m);
     if (/(_Paint|_green_hell|_Body)$/.test(n)) m.material = paint;
@@ -487,6 +490,7 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
       }
     }
   }
+  if (cfg.glass) { M.glass.opacity = cfg.glass; M.glass.color.set(0x050507); }
   const rimMat = rims[0]?.material?.clone(); if (rimMat) { rimMat.userData.base = { color: rimMat.color.clone(), metal: rimMat.metalness, rough: rimMat.roughness, coat: rimMat.clearcoat || 0 }; rims.forEach((m) => m.material = rimMat); }
   const boltMat = bolts[0]?.material; const calMat = calipers[0]?.material?.clone(); if (calMat) calipers.forEach((m) => m.material = calMat);
 
@@ -561,10 +565,16 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
     for (let k = 0; k < 24; k++) a.applyMatrix3(inv).normalize();
     if (Math.abs(a.x) < 0.8) a.set(1, 0, 0);      // a tyre's axle always runs across the car
     if (a.x < 0) a.negate();
-    let tmin = 1e9, tmax = -1e9; const rho = new Float32Array(n), d = new THREE.Vector3();
-    P.forEach((p, k) => { d.copy(p).sub(c); const t = d.dot(a); tmin = Math.min(tmin, t); tmax = Math.max(tmax, t); rho[k] = d.addScaledVector(a, -t).length(); });
+    // the centre is the middle of the tyre's extents along its axle and across its face: a centroid drifts toward
+    // where the mesh is denser (the Agera's sat 2 cm off, so its wheels turned eccentrically and seemed to deform)
+    const u = new THREE.Vector3(0, 1, 0).addScaledVector(a, -a.y).normalize(), w2 = new THREE.Vector3().crossVectors(a, u), d = new THREE.Vector3();
+    let tmin = 1e9, tmax = -1e9, umin = 1e9, umax = -1e9, wmin = 1e9, wmax = -1e9;
+    for (const p of P) { d.copy(p).sub(c); const t = d.dot(a), pu = d.dot(u), pw = d.dot(w2);
+      tmin = Math.min(tmin, t); tmax = Math.max(tmax, t); umin = Math.min(umin, pu); umax = Math.max(umax, pu); wmin = Math.min(wmin, pw); wmax = Math.max(wmax, pw); }
+    c.addScaledVector(a, (tmin + tmax) / 2).addScaledVector(u, (umin + umax) / 2).addScaledVector(w2, (wmin + wmax) / 2);
+    const rho = new Float32Array(n);
+    P.forEach((p, k) => { d.copy(p).sub(c); rho[k] = d.addScaledVector(a, -d.dot(a)).length(); });
     const sorted = Array.from(rho).sort((x, y) => x - y);
-    c.addScaledVector(a, (tmin + tmax) / 2);
     const single = !g.shared && [...g.meshes].every((m) => groups.filter((h) => h.meshes.has(m)).length === 1);
     wheels.push({ x: c.x, y: c.y, z: c.z, r: sorted[Math.floor(n * 0.995)], ri: sorted[Math.floor(n * 0.005)], width: tmax - tmin,
                   axis: a, mesh: single ? [...g.meshes][0] : null });
@@ -586,6 +596,42 @@ vec3 hash33(vec3 p){ p = fract(p * vec3(.1031,.1030,.0973)); p += dot(p, p.yxz +
   cluster(lampsT, 'tail'); cluster(lampsF.filter((m) => world(m).getCenter(new THREE.Vector3()).z * front > 0), 'lamp');
   cluster(has(/Exhaust/), 'exhaust');
   if (!A.exhaust) A.exhaust = A.rear.clone().setY(sz.y * 0.2);
+
+  // Wheel parts modelled once for an axle (the Chiron's rims and nuts) are cut per wheel like the tyres, so each part
+  // turns with its own wheel: a mesh whose vertices all lie inside the wheels' cylinders, at least two of them.
+  {
+    const inWheel = (p) => { for (let i = 0; i < wheels.length; i++) { const w = wheels[i];
+      if (Math.abs(p.x - w.x) < (w.width || w.r) * 0.8 && Math.hypot(p.y - w.y, p.z - w.z) < w.r * 1.04) return i; } return -1; };
+    const q = new THREE.Vector3(), a3 = new THREE.Vector3(), wheelTop = Math.max(...wheels.map((w) => w.y + w.r * 1.06));
+    for (const m of [...meshes]) {
+      const n0 = matName(m);
+      if (/Tyre|_Paint$|_Body$|_green_hell$/.test(n0) || tyreMeshes.includes(m)) continue;
+      const b = world(m), s = b.getSize(new THREE.Vector3());
+      if (!(s.x > sz.x * 0.5 || s.z > sz.z * 0.45) || b.max.y > wheelTop) continue;
+      const geo = m.geometry, pos = geo.attributes.position, idx = geo.index, nv = idx ? idx.count : pos.count, step = Math.max(1, Math.floor(nv / 3000));
+      m.updateMatrixWorld(true);
+      let inside = 0, tot = 0; const seen = new Set();
+      for (let k = 0; k < nv; k += step) { tot++; const i = inWheel(q.fromBufferAttribute(pos, idx ? idx.getX(k) : k).applyMatrix4(m.matrixWorld)); if (i >= 0) { inside++; seen.add(i); } }
+      if (inside / tot < 0.97 || seen.size < 2) continue;
+      const nt = nv / 3, buckets = new Map();
+      for (let tr = 0; tr < nt; tr++) {
+        a3.set(0, 0, 0); const ids = [0, 1, 2].map((j) => (idx ? idx.getX(tr * 3 + j) : tr * 3 + j));
+        for (const id of ids) a3.add(q.fromBufferAttribute(pos, id)); a3.divideScalar(3).applyMatrix4(m.matrixWorld);
+        let best = 0, bd = 1e9; wheels.forEach((w, i) => { const dd = Math.hypot(a3.x - w.x, a3.y - w.y, a3.z - w.z); if (dd < bd) { bd = dd; best = i; } });
+        let arr = buckets.get(best); if (!arr) buckets.set(best, arr = []); arr.push(...ids);
+      }
+      for (const arr of buckets.values()) {
+        const g2 = new THREE.BufferGeometry(); for (const k in geo.attributes) g2.setAttribute(k, geo.attributes[k]); g2.setIndex(arr);
+        const bb = new THREE.Box3(); for (const k of arr) bb.expandByPoint(q.fromBufferAttribute(pos, k));
+        g2.boundingBox = bb; g2.boundingSphere = bb.getBoundingSphere(new THREE.Sphere());
+        const part = new THREE.Mesh(g2, m.material); part.name = m.name + '_w' + meshes.length;
+        part.position.copy(m.position); part.quaternion.copy(m.quaternion); part.scale.copy(m.scale);
+        part.userData.mat0 = m.userData.mat0; m.parent.add(part); part.updateMatrixWorld(true); meshes.push(part);
+        if (rims.includes(m)) rims.push(part);
+      }
+      m.parent.remove(m); meshes.splice(meshes.indexOf(m), 1);
+    }
+  }
 
   /* ---------- wheels and body: the unsprung parts on their own nodes, the body on springs above them ---------- */
   // A tyre that holds one wheel gets a pivot it turns on, with its rim and disc. A tyre shared across an axle can't turn
@@ -786,7 +832,9 @@ void main() { float d = length(gl_PointCoord - 0.5); vec3 c = uC * smoothstep(0.
     const P = portal; P.t += dt; P.a += (target - P.a) * Math.min(1, dt * (target > P.a ? 5 : 2.2));
     P.ca = (P.ca || 0) + (curtain - (P.ca || 0)) * Math.min(1, dt * (curtain > (P.ca || 0) ? 5 : 2.2));
     P.g.visible = P.a > 0.004;
-    P.uni.uT.value = P.t; P.uni.uA.value = P.a; P.uni.uCA.value = P.ca; P.sparks.visible = P.ca > 0.01; P.uni.uRoad.value = road ? road.u.uA.value : 0;
+    const cam = ctx.camera?.getWorldPosition(new THREE.Vector3()), outside = !cam || Math.hypot(cam.x, cam.z) > P.R * 1.35;
+    P.uni.uT.value = P.t; P.uni.uA.value = P.a * (outside ? 1 : 0.35); P.uni.uCA.value = outside ? P.ca : 0; P.sparks.visible = outside && P.ca > 0.01;
+    P.uni.uRoad.value = Math.max(cfg.portalFloor === false ? 1 : 0, road ? road.u.uA.value : 0);
     if (P.uni.uShock.value >= 0) { P.uni.uShock.value += dt * 1.4; if (P.uni.uShock.value > 1) P.uni.uShock.value = -1; }
     P.sparks.material.uniforms.uSize.value = (ctx.renderer?.domElement.height || 900) * 0.012;
     for (let i = 0; i < P.N; i++) {
@@ -1417,7 +1465,7 @@ carKit.prepRim = (THREE, scene) => {
 };
 
 
-const CARS = [{"key": "f812", "no": "01", "make": "Ferrari", "name": "812 Superfast", "accent": "#8f5fd6", "paint": "Viola Notte", "exhaust": "Canto", "cfg": {"paints": [{"name": "Viola Notte", "color": "#24093f", "caliper": "#0b0b0c"}, {"name": "Rosso Bordeaux", "color": "#3c0710", "caliper": "#0b0b0c"}, {"name": "Blu Notte", "color": "#0b1a45", "caliper": "#0b0b0c"}, {"name": "Verde Abetone", "color": "#0b2b1d", "caliper": "#0b0b0c"}], "matte": false, "livery": null, "engine": {"name": "Canto", "note": "naturally aspirated V12, valved to sing to 8,900 rpm", "cyl": 12, "idle": 1000, "redline": 8900, "top": 340, "z100": 2.9, "harm": [1, 0.75, 0.6, 0.52, 0.45, 0.4, 0.34, 0.3, 0.26, 0.22, 0.2, 0.17, 0.15, 0.13, 0.11, 0.1, 0.09, 0.08], "sub": 0.04, "sub4": 0, "rasp": 0.1, "body": 1300, "bright": 9500, "drive": 1.6, "ring": [2600, 2.5, 5], "turbo": 0, "lift": null, "whine": 0, "pops": 0.45, "vol": 1}, "accent": "#8f5fd6"}}, {"key": "agera", "no": "02", "make": "Koenigsegg", "name": "Agera", "accent": "#c0485a", "paint": "Rosso Borgogna", "exhaust": "Ghost", "cfg": {"paints": [{"name": "Rosso Borgogna", "color": "#3c0712"}, {"name": "Blu Notte", "color": "#0b1a45"}, {"name": "Viola", "color": "#2a0c46"}, {"name": "Verde Inglese", "color": "#0b2b1d"}], "matte": false, "livery": null, "engine": {"name": "Ghost", "note": "twin-turbo flat-plane V8, wastegates that chatter on every lift", "cyl": 8, "idle": 950, "redline": 7250, "top": 390, "z100": 3.1, "harm": [1, 0.95, 0.5, 0.5, 0.3, 0.28, 0.18, 0.16, 0.1, 0.09, 0.06], "sub": 0.14, "sub4": 0.03, "rasp": 0.32, "body": 850, "bright": 6200, "drive": 2.3, "ring": [1400, 2, 4], "turbo": 0.9, "lift": "flutter", "whine": 0, "pops": 0.8, "vol": 1}, "accent": "#c0485a"}}, {"key": "chiron", "no": "03", "make": "Bugatti", "name": "Chiron", "accent": "#4d78e0", "paint": "Midnight Blue", "exhaust": "Molsheim", "cfg": {"paints": [{"name": "Midnight Blue", "color": "#0a1838"}, {"name": "Bordeaux", "color": "#3c0712"}, {"name": "Violet", "color": "#24093f"}, {"name": "Racing Green", "color": "#0b2b1d"}], "matte": false, "livery": null, "engine": {"name": "Molsheim", "note": "four turbos into one deep W16, a rush of air on every lift", "cyl": 16, "idle": 900, "redline": 6700, "top": 420, "z100": 2.4, "harm": [1, 0.5, 0.45, 0.3, 0.25, 0.16, 0.13, 0.09, 0.07, 0.05], "sub": 0.4, "sub4": 0.25, "rasp": 0.12, "body": 520, "bright": 3000, "drive": 1.5, "ring": [160, 1.2, 6], "turbo": 1, "lift": "whoosh", "whine": 0, "pops": 0.12, "vol": 1.15}, "accent": "#4d78e0"}}, {"key": "one1", "no": "04", "make": "Koenigsegg", "name": "One:1", "accent": "#d27a3e", "paint": "Liquid Copper", "exhaust": "Megawatt", "cfg": {"paints": [{"name": "Liquid Copper", "color": "#7a3214"}, {"name": "Bordeaux", "color": "#3c0712"}, {"name": "Midnight Blue", "color": "#0b1a45"}, {"name": "Violet", "color": "#2a0c46"}], "matte": false, "livery": null, "engine": {"name": "Megawatt", "note": "titanium with a 3D-printed tip, the flat-plane V8 at its angriest to 8,250 rpm", "cyl": 8, "idle": 1000, "redline": 8250, "top": 440, "z100": 2.8, "harm": [1, 1, 0.62, 0.58, 0.42, 0.38, 0.26, 0.24, 0.16, 0.14, 0.1, 0.09], "sub": 0.1, "sub4": 0.02, "rasp": 0.42, "body": 1100, "bright": 8500, "drive": 2.8, "ring": [2100, 5, 7], "turbo": 0.75, "lift": "flutter", "whine": 0, "pops": 1, "vol": 1.05}, "accent": "#d27a3e"}}, {"key": "projectone", "no": "05", "make": "Mercedes-AMG", "name": "Project One", "accent": "#7cc11e", "paint": "AMG Green Hell", "exhaust": "Brixworth", "cfg": {"paints": [{"name": "AMG Green Hell", "color": "#3b6a2c", "flake": 0}], "matte": true, "livery": {"color": "#f0c419", "sweep": [0.92, -0.98, 0.42, 0.6, 0.024], "pin": [0.14, 0.012], "carbonBelow": 0.14, "decal": {"src": "amg_side.png", "at": [0.02, 0.3], "size": [0.62, 0.08], "color": "#0d0d0e"}}, "engine": {"name": "Brixworth", "note": "a Formula One V6 to 11,000 rpm under the electric whine", "cyl": 6, "idle": 1300, "redline": 11000, "top": 352, "z100": 2.9, "harm": [1, 0.45, 0.7, 0.3, 0.45, 0.2, 0.3, 0.12, 0.18, 0.08, 0.12, 0.06], "sub": 0.05, "sub4": 0, "rasp": 0.15, "body": 1500, "bright": 9000, "drive": 1.9, "ring": [3200, 4, 4], "turbo": 0.45, "lift": "flutter", "whine": 0.7, "pops": 0.25, "vol": 0.95}, "accent": "#7cc11e"}}];
+const CARS = [{"key": "f812", "no": "01", "make": "Ferrari", "name": "812 Superfast", "accent": "#8f5fd6", "paint": "Viola Notte", "exhaust": "Canto", "cfg": {"paints": [{"name": "Viola Notte", "color": "#24093f", "caliper": "#0b0b0c"}, {"name": "Rosso Bordeaux", "color": "#3c0710", "caliper": "#0b0b0c"}, {"name": "Blu Notte", "color": "#0b1a45", "caliper": "#0b0b0c"}, {"name": "Verde Abetone", "color": "#0b2b1d", "caliper": "#0b0b0c"}], "matte": false, "livery": null, "engine": {"name": "Canto", "note": "naturally aspirated V12, valved to sing to 8,900 rpm", "cyl": 12, "idle": 1000, "redline": 8900, "top": 340, "z100": 2.9, "harm": [1, 0.75, 0.6, 0.52, 0.45, 0.4, 0.34, 0.3, 0.26, 0.22, 0.2, 0.17, 0.15, 0.13, 0.11, 0.1, 0.09, 0.08], "sub": 0.04, "sub4": 0, "rasp": 0.1, "body": 1300, "bright": 9500, "drive": 1.6, "ring": [2600, 2.5, 5], "turbo": 0, "lift": null, "whine": 0, "pops": 0.45, "vol": 1}, "accent": "#8f5fd6", "glass": null}}, {"key": "agera", "no": "02", "make": "Koenigsegg", "name": "Agera", "accent": "#c0485a", "paint": "Rosso Borgogna", "exhaust": "Ghost", "cfg": {"paints": [{"name": "Rosso Borgogna", "color": "#3c0712"}, {"name": "Blu Notte", "color": "#0b1a45"}, {"name": "Viola", "color": "#2a0c46"}, {"name": "Verde Inglese", "color": "#0b2b1d"}], "matte": false, "livery": null, "engine": {"name": "Ghost", "note": "twin-turbo flat-plane V8, wastegates that chatter on every lift", "cyl": 8, "idle": 950, "redline": 7250, "top": 390, "z100": 3.1, "harm": [1, 0.95, 0.5, 0.5, 0.3, 0.28, 0.18, 0.16, 0.1, 0.09, 0.06], "sub": 0.14, "sub4": 0.03, "rasp": 0.32, "body": 850, "bright": 6200, "drive": 2.3, "ring": [1400, 2, 4], "turbo": 0.9, "lift": "flutter", "whine": 0, "pops": 0.8, "vol": 1}, "accent": "#c0485a", "glass": null}}, {"key": "chiron", "no": "03", "make": "Bugatti", "name": "Chiron", "accent": "#4d78e0", "paint": "Midnight Blue", "exhaust": "Molsheim", "cfg": {"paints": [{"name": "Midnight Blue", "color": "#0a1838"}, {"name": "Bordeaux", "color": "#3c0712"}, {"name": "Violet", "color": "#24093f"}, {"name": "Racing Green", "color": "#0b2b1d"}], "matte": false, "livery": null, "engine": {"name": "Molsheim", "note": "four turbos into one deep W16, a rush of air on every lift", "cyl": 16, "idle": 900, "redline": 6700, "top": 420, "z100": 2.4, "harm": [1, 0.5, 0.45, 0.3, 0.25, 0.16, 0.13, 0.09, 0.07, 0.05], "sub": 0.4, "sub4": 0.25, "rasp": 0.12, "body": 520, "bright": 3000, "drive": 1.5, "ring": [160, 1.2, 6], "turbo": 1, "lift": "whoosh", "whine": 0, "pops": 0.12, "vol": 1.15}, "accent": "#4d78e0", "glass": null}}, {"key": "one1", "no": "04", "make": "Koenigsegg", "name": "One:1", "accent": "#d27a3e", "paint": "Liquid Copper", "exhaust": "Megawatt", "cfg": {"paints": [{"name": "Liquid Copper", "color": "#7a3214"}, {"name": "Bordeaux", "color": "#3c0712"}, {"name": "Midnight Blue", "color": "#0b1a45"}, {"name": "Violet", "color": "#2a0c46"}], "matte": false, "livery": null, "engine": {"name": "Megawatt", "note": "titanium with a 3D-printed tip, the flat-plane V8 at its angriest to 8,250 rpm", "cyl": 8, "idle": 1000, "redline": 8250, "top": 440, "z100": 2.8, "harm": [1, 1, 0.62, 0.58, 0.42, 0.38, 0.26, 0.24, 0.16, 0.14, 0.1, 0.09], "sub": 0.1, "sub4": 0.02, "rasp": 0.42, "body": 1100, "bright": 8500, "drive": 2.8, "ring": [2100, 5, 7], "turbo": 0.75, "lift": "flutter", "whine": 0, "pops": 1, "vol": 1.05}, "accent": "#d27a3e", "glass": 0.9}}, {"key": "projectone", "no": "05", "make": "Mercedes-AMG", "name": "Project One", "accent": "#7cc11e", "paint": "AMG Green Hell", "exhaust": "Brixworth", "cfg": {"paints": [{"name": "AMG Green Hell", "color": "#3b6a2c", "flake": 0}], "matte": true, "livery": {"color": "#f0c419", "sweep": [0.92, -0.98, 0.42, 0.6, 0.024], "pin": [0.14, 0.012], "carbonBelow": 0.14, "decal": {"src": "amg_side.png", "at": [0.02, 0.3], "size": [0.62, 0.08], "color": "#0d0d0e"}}, "engine": {"name": "Brixworth", "note": "a Formula One V6 to 11,000 rpm under the electric whine", "cyl": 6, "idle": 1300, "redline": 11000, "top": 352, "z100": 2.9, "harm": [1, 0.45, 0.7, 0.3, 0.45, 0.2, 0.3, 0.12, 0.18, 0.08, 0.12, 0.06], "sub": 0.05, "sub4": 0, "rasp": 0.15, "body": 1500, "bright": 9000, "drive": 1.9, "ring": [3200, 4, 4], "turbo": 0.45, "lift": "flutter", "whine": 0.7, "pops": 0.25, "vol": 0.95}, "accent": "#7cc11e", "glass": null}}];
 const RIMS = [
   { id: 'factory', name: 'Factory', spec: 'The wheels the car was built with.' },
   { id: 'y5', name: 'Y-spoke', spec: 'Five split Y-spokes, forged from one billet, 20 inch, centre-lock look.' },
@@ -1553,7 +1601,7 @@ async function loadCar(c) {
   const box = new THREE.Box3().setFromObject(model, true), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
   const L = Math.max(size.x, size.y, size.z), s = 1 / L;
   const wrap = new THREE.Group(); model.position.set(-ctr.x, -box.min.y, -ctr.z); wrap.add(model); wrap.scale.setScalar(s); holder.add(wrap); wrap.updateMatrixWorld(true);
-  carCtx = { THREE, holder, wrap, model, renderer, scale: s, size: size.clone().multiplyScalar(s), anchors: { center: new THREE.Vector3(0, size.y * s / 2, 0) }, opt: { front: -1 } };
+  carCtx = { THREE, holder, wrap, model, renderer, camera, scale: s, size: size.clone().multiplyScalar(s), anchors: { center: new THREE.Vector3(0, size.y * s / 2, 0) }, opt: { front: -1 } };
   kit = carKit(carCtx, c.cfg);
   kit.setPaint(c.cfg.paints[0]);
   shadowFor(carCtx);

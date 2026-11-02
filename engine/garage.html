@@ -232,7 +232,7 @@ async function loadCar(c) {
   const box = new THREE.Box3().setFromObject(model, true), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
   const L = Math.max(size.x, size.y, size.z), s = 1 / L;
   const wrap = new THREE.Group(); model.position.set(-ctr.x, -box.min.y, -ctr.z); wrap.add(model); wrap.scale.setScalar(s); holder.add(wrap); wrap.updateMatrixWorld(true);
-  carCtx = { THREE, holder, wrap, model, renderer, scale: s, size: size.clone().multiplyScalar(s), anchors: { center: new THREE.Vector3(0, size.y * s / 2, 0) }, opt: { front: -1 } };
+  carCtx = { THREE, holder, wrap, model, renderer, camera, scale: s, size: size.clone().multiplyScalar(s), anchors: { center: new THREE.Vector3(0, size.y * s / 2, 0) }, opt: { front: -1 } };
   kit = carKit(carCtx, c.cfg);
   kit.setPaint(c.cfg.paints[0]);
   shadowFor(carCtx);

@@ -132,6 +132,7 @@ ISSUES = {
         paints=[{'name': 'Liquid Copper', 'color': '#7a3214'}, {'name': 'Bordeaux', 'color': '#3c0712'},
                 {'name': 'Midnight Blue', 'color': '#0b1a45'}, {'name': 'Violet', 'color': '#2a0c46'}],
         rim_factory='Gloss carbon black', bolts=False, wheel='y5', finish=1,
+        glass=0.9,
         engine={'name': 'Megawatt', 'note': 'titanium with a 3D-printed tip, the flat-plane V8 at its angriest to 8,250 rpm', 'cyl': 8, 'idle': 1000, 'redline': 8250, 'top': 440, 'z100': 2.8,
                 'harm': [1, 1, .62, .58, .42, .38, .26, .24, .16, .14, .1, .09], 'sub': .1, 'sub4': .02, 'rasp': .42,
                 'body': 1100, 'bright': 8500, 'drive': 2.8, 'ring': [2100, 5, 7], 'turbo': .75, 'lift': 'flutter', 'whine': 0, 'pops': 1, 'vol': 1.05},
@@ -230,7 +231,7 @@ def page(key, links):
         paints_block = f'<div class="group rv"><span class="lab">Finish</span><p class="finish-one">{e(c["paints"][0]["name"])} · the livery as specified</p></div>'
     next_href = links.get(nxt, '#')
     cfg = {'paints': c['paints'], 'rims': [dict(r, name=(c['rim_factory'] if r.get('factory') else r['name'])) for r in RIMS],
-           'bolts': BOLTS if c.get('bolts') else [], 'matte': c.get('matte', False), 'livery': c.get('livery'), 'engine': c.get('engine'), 'accent': c['accent'],
+           'bolts': BOLTS if c.get('bolts') else [], 'matte': c.get('matte', False), 'livery': c.get('livery'), 'engine': c.get('engine'), 'accent': c['accent'], 'glass': c.get('glass'), 'portalFloor': False,
            'wheels': WHEELS, 'wheel': c.get('wheel', 'factory'), 'finish': c.get('finish', 0)}
     n1, n2, n3 = c['night']
     tpl = (SRC / 'issue.html').read_text()
