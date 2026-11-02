@@ -1,4 +1,0 @@
-# third-party car models and a maker's mark: kept out of git (see README)
-issues/*/model.glb
-garage/model-*.glb
-*.png
