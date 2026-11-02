@@ -2,7 +2,7 @@
 
 A car magazine you read by scrolling. Five issues, one car each, in 3D: the car sits in front of the words and moves
 from spread to spread (cover, build sheet, design & stance, signature details, after dark, final impression). A garage
-library holds all five cars in one page, under their names in neon, with forged rims to fit on any of them.
+library holds all five cars in one page, each in front of its name painted on the wall, with forged rims to fit on any of them.
 
 Every page has an ignition: a start button inside a rev counter (on each issue's cover, in its top bar and in its After
 Dark spread; centre stage in the garage). Press it and the needle sweeps, the

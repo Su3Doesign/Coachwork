@@ -2,7 +2,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300..700&family=Jost:wght@300;400;500&family=Cormorant+Garamond:ital,wght@1,500&display=swap">
 <style>
-/* Layout: a night garage as a tool. The car stands on a polished floor in front of its own name in neon on the wall;
+/* Layout: a night garage as a tool. The car stands on a polished floor in front of its own name painted on the wall;
    the left rail picks the car (each loads only when chosen), the bottom rail is the rim library, the right rail the views,
    and the ignition (start button in a rev counter, lights and sound beside it) sits centre stage under the car. */
 :root {
@@ -91,7 +91,6 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 %%IMPORTMAP%%
 <script type="module">
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 %%STAGE%%
 %%CARKIT%%
 
@@ -145,55 +144,23 @@ const grad = (stops, w, h, radial) => { const c = document.createElement('canvas
 const cyc = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 3.4, 128, 1, true),
   new THREE.MeshBasicMaterial({ map: grad([[0, '#2a2a30'], [0.18, '#18181c'], [0.6, '#0c0c0e'], [1, '#070708']], 8, 256), side: THREE.BackSide, fog: false }));
 cyc.position.y = 1.7; scene.add(cyc);
-// the floor is polished: it lets a little of what is mirrored under it show through (the neon's reflection)
 const floor = new THREE.Mesh(new THREE.CircleGeometry(4.2, 128), new THREE.MeshStandardMaterial({
-  map: grad([[0, '#64646c'], [0.22, '#424249'], [0.62, '#29292f'], [1, '#2e2e34']], 512, 512, true), roughness: 0.32, metalness: 0.05, transparent: true, opacity: 0.86 }));
-floor.rotation.x = -Math.PI / 2; floor.renderOrder = -1; scene.add(floor);
+  map: grad([[0, '#5a5a62'], [0.22, '#3a3a40'], [0.62, '#24242a'], [1, '#2a2a30']], 512, 512, true), roughness: 0.32, metalness: 0.05 }));
+floor.rotation.x = -Math.PI / 2; scene.add(floor);
 scene.background = new THREE.Color(0x070708); scene.fog = null;
 
-// The car's name in neon on the far wall: glass tubes bent round the letters, a white-hot core in a coloured tube with
-// its halo, bright past 1.0 so the bloom takes it. It lights the floor and the back of the car in its colour (a soft
-// area light, kept low so the paint still reads true) and shows in the floor. It strikes with a flicker for each car.
-RectAreaLightUniformsLib.init();
-// it stands where the opening view looks past the car, facing it, so the name reads behind the car
-const NEON = { w: 3.3, h: 0.825, y: 0.345, at: new THREE.Vector3(-0.95, 0, 1.2).normalize().multiplyScalar(3.6) };
-const neonYaw = Math.atan2(-NEON.at.x, -NEON.at.z);
-const neonC = document.createElement('canvas'); neonC.width = 2048; neonC.height = 512;
-const neonR = document.createElement('canvas'); neonR.width = 1024; neonR.height = 256;
-const neonTex = new THREE.CanvasTexture(neonC), neonRTex = new THREE.CanvasTexture(neonR);
-for (const tx of [neonTex, neonRTex]) { tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; }
-const neonMat = new THREE.MeshBasicMaterial({ map: neonTex, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, color: 0x000000 });
-const neon = new THREE.Mesh(new THREE.PlaneGeometry(NEON.w, NEON.h), neonMat);
-neon.position.set(NEON.at.x, NEON.y, NEON.at.z); neon.rotation.y = neonYaw; scene.add(neon);
-const neonReflMat = new THREE.MeshBasicMaterial({ map: neonRTex, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, color: 0x000000, side: THREE.DoubleSide });
-const neonRefl = new THREE.Mesh(new THREE.PlaneGeometry(NEON.w, NEON.h), neonReflMat);
-neonRefl.position.set(NEON.at.x, -NEON.y, NEON.at.z); neonRefl.rotation.y = neonYaw; neonRefl.scale.y = -1; neonRefl.renderOrder = -2; scene.add(neonRefl);
-const neonLight = new THREE.RectAreaLight(0xffffff, 0, NEON.w * 0.7, NEON.h * 0.45);
-neonLight.position.set(NEON.at.x * 0.98, NEON.y, NEON.at.z * 0.98); neonLight.lookAt(0, 0.2, 0); scene.add(neonLight);
-let neonT = 9, neonCol = new THREE.Color();
-// blurred strokes drawn through a shadow (canvas filters are missing on some browsers)
-function glowText(g, txt, color, width, blur, alpha) {
-  g.save(); g.globalAlpha = alpha; g.lineWidth = width; g.strokeStyle = color; g.shadowColor = color; g.shadowBlur = blur;
-  g.shadowOffsetX = 10000; g.translate(-10000, 0); g.strokeText(txt, 0, 0); g.restore();
+// the car's name painted on the far wall in its colour, where the opening view looks past the car, so it reads behind it
+const WALL = { w: 3.3, h: 0.825, y: 0.345, at: new THREE.Vector3(-0.95, 0, 1.2).normalize().multiplyScalar(3.6) };
+const wallC = document.createElement('canvas'); wallC.width = 2048; wallC.height = 512;
+const wallTex = new THREE.CanvasTexture(wallC); wallTex.colorSpace = THREE.SRGBColorSpace; wallTex.anisotropy = 8;
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(WALL.w, WALL.h), new THREE.MeshBasicMaterial({ map: wallTex, transparent: true, depthWrite: false, toneMapped: false }));
+wall.position.set(WALL.at.x, WALL.y, WALL.at.z); wall.rotation.y = Math.atan2(-WALL.at.x, -WALL.at.z); scene.add(wall);
+function paintWall(name, color) {
+  const g = wallC.getContext('2d'); g.clearRect(0, 0, 2048, 512);
+  g.font = '600 400px Oswald, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = color; g.globalAlpha = 0.55; g.fillText(name.toUpperCase(), 1024, 280, 1960);
+  wallTex.needsUpdate = true;
 }
-function drawNeon(g, W, H, txt, color, sc) {
-  g.clearRect(0, 0, W, H); g.save();
-  g.font = '600 380px Oswald, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineCap = 'round';
-  const k = Math.min(1, 1860 / g.measureText(txt).width) * sc; g.translate(W / 2, H * 0.53); g.scale(k, k);
-  const core = '#' + new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.72).getHexString();
-  glowText(g, txt, color, 22, 60, 0.75); glowText(g, txt, color, 12, 16, 0.9);
-  if (sc === 1) { g.lineWidth = 9; g.strokeStyle = color; g.strokeText(txt, 0, 0); g.lineWidth = 3; g.strokeStyle = core; g.strokeText(txt, 0, 0); }
-  else glowText(g, txt, core, 14, 10, 0.8);
-  g.restore();
-}
-function neonOn(name, color) {
-  const txt = name.toUpperCase();
-  drawNeon(neonC.getContext('2d'), 2048, 512, txt, color, 1); neonTex.needsUpdate = true;
-  drawNeon(neonR.getContext('2d'), 1024, 256, txt, color, 0.5); neonRTex.needsUpdate = true;
-  neonCol.set(color); neonLight.color.copy(neonCol); neonT = window.__stageSnap ? 9 : 0;
-}
-// the strike: a stutter, then the tubes fill
-const neonLevel = (t) => t < 0.25 ? 0 : t < 0.32 ? 0.8 : t < 0.42 ? 0.05 : t < 0.47 ? 1 : t < 0.6 ? 0.25 : Math.min(1, 0.55 + (t - 0.6) * 1.6);
 
 /* ---------- loading a car (one at a time; the last one is freed) ---------- */
 const draco = new DRACOLoader().setDecoderPath('draco/');
@@ -221,7 +188,7 @@ async function loadCar(c) {
   kit = carKit(carCtx, c.cfg);
   kit.setPaint(c.cfg.paints[0]);
   shadowFor(carCtx);
-  neonOn(c.name, c.accent);
+  paintWall(c.name, c.accent);
   document.documentElement.style.setProperty('--accent', c.accent);
   loader.classList.add('off');
   applyRims(true);
@@ -329,13 +296,10 @@ controls.addEventListener('start', () => { fly = null; });
   }
   controls.update();
   kit?.frame({ lights: 0, env: 1, spin: 0 }, dt);
-  neonT += dt; const nl = neonLevel(neonT);
-  neonMat.color.copy(neonCol).lerp(new THREE.Color(1, 1, 1), 0.55).multiplyScalar(2.3 * nl);
-  neonReflMat.color.setScalar(0.9 * nl); neonLight.intensity = 2.2 * nl;
   fx.composer.render(dt);
 })();
 
 window.__garage = { kit: () => kit, ctx: () => carCtx, wheels: () => carCtx?.wheels, cam: (p, t) => { fly = null; controls.autoRotate = false; camera.position.set(...p); controls.target.set(...t); controls.update(); } };
-document.fonts?.load('600 100px Oswald').then(() => { const c = CARS.find((x) => x.key === current?.userData.key) || CARS.find((x) => x.key === 'agera'); const t0 = neonT; neonOn(c.name, c.accent); neonT = t0; });
+document.fonts?.load('600 100px Oswald').then(() => { const c = CARS.find((x) => x.key === current?.userData.key) || CARS.find((x) => x.key === 'agera'); paintWall(c.name, c.accent); });
 carsEl.querySelectorAll('.car')[CARS.findIndex((c) => c.key === 'agera')].click();
 </script>
